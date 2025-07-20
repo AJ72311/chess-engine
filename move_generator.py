@@ -1,4 +1,5 @@
 import board
+from board import Board, Move
 
 # global empty square and out-of-bounds square constants
 EMPTY = '#'
@@ -41,7 +42,291 @@ BLACK_PAWN_DELTAS = {
 
 # generates all legal moves for a position, "position" is a "Board" object
 def generate_moves(position):
-    pass
+    legal_moves = []        # initialize the final array of legal moves to return later
+    board = position.board
+    
+    # define variables used in move generation logic
+    if (position.color_to_play == 'white'):
+        enemy_color = 'black'
+        friendly_king = 'K'
+        friendly_knight = 'N'
+        friendly_bishop = 'B'
+        friendly_rook = 'R'
+        friendly_queen = 'Q'
+        friendly_pawn = 'P'
+        enemy_pawn = 'p'
+        friendly_pieces = WHITE_PIECES
+        enemy_pieces = BLACK_PIECES
+        pawn_deltas = WHITE_PAWN_DELTAS
+        promotion_squares = [21, 22, 23, 24, 25, 26, 27, 28]
+        promotion_pieces = ['B', 'N', 'R', 'Q']
+        castle_kingside = position.white_castle_kingside
+        castle_queenside = position.white_castle_queenside
+        kingside_castle_path = [96, 97]
+        queenside_castle_path = [92, 93, 94]        # b1, c1, and d1 have to be empty
+        queenside_king_castle_path = [93, 94]       # king path stops a c1
+        castle_kingside_destination = 97
+        castle_queenside_destination = 93
+        king_home_square = 95
+    else:
+        enemy_color = 'white'
+        friendly_king = 'k'
+        friendly_knight = 'n'
+        friendly_bishop = 'b'
+        friendly_rook = 'r'
+        friendly_queen = 'q'
+        friendly_pawn = 'p'
+        enemy_pawn = 'P'
+        friendly_pieces = BLACK_PIECES
+        enemy_pieces = WHITE_PIECES
+        pawn_deltas = BLACK_PAWN_DELTAS
+        promotion_squares = [91, 92, 93, 94, 95, 96, 97, 98]
+        promotion_pieces = ['b', 'n', 'r', 'q']
+        castle_kingside = position.black_castle_kingside
+        castle_queenside = position.black_castle_queenside
+        kingside_castle_path = [26, 27]
+        queenside_castle_path = [22, 23, 24]       # b8, c8, and d8 have to be empty
+        queenside_king_castle_path = [23, 24]      # king path stops at c8
+        castle_kingside_destination = 27
+        castle_queenside_destination = 23
+        king_home_square = 25
+
+    # get array of enemy-controlled squares and the number of checks in the position
+    threat_map, check_count = get_threat_map(position, enemy_color)
+    king_index = board.index(friendly_king)
+
+    if check_count < 2:     # if not a double check
+        checks, pins = get_checks_and_pins(position, king_index)    # arrays of check and pin dicts
+        # structure of 'checks':
+        # {
+        #   'checker_index': ...,
+        #   'check_path': [...],
+        #   'is_sliding': ...
+        # }
+
+        # structure of 'pins':
+        # {
+        #   'pinner_index': ...,
+        #   'pin_path': [...],
+        #   'pinned_piece_index': ...
+        # }
+
+        is_check = False
+        if len(checks) > 0:
+            is_check = True
+            check = checks[0]       # if is a check but len of checks array is < 2, there is only 1 element in checks
+
+        for index, piece in enumerate(board):
+            if piece in friendly_pieces:    # if this is a friendly-color piece
+                # get pseudo-legal moves, each array includes all pseudo-legal destination squares                      
+                if piece == friendly_knight:
+                    pseudo_legal_moves = knight_moves(position, index)
+                elif piece == friendly_bishop:
+                    pseudo_legal_moves = bishop_moves(position, index)
+                elif piece == friendly_rook:
+                    pseudo_legal_moves = rook_moves(position, index)
+                elif piece == friendly_queen:
+                    pseudo_legal_moves = queen_moves(position, index)
+                elif piece == friendly_king:
+                    pseudo_legal_moves = king_moves(position, index)
+                elif piece == friendly_pawn:
+                    if (position.color_to_play == 'white'):
+                        pawn_moves_dict = white_pawn_moves(position, index)
+                    else:
+                        pawn_moves_dict = black_pawn_moves(position, index)
+                    
+                    pseudo_legal_moves = pawn_moves_dict['attacks'] + pawn_moves_dict['advances']
+
+                    # add en passant move if applicable
+                    for delta in pawn_deltas['attacks']:
+                        if index + delta == position.en_passant_square:
+                            pseudo_legal_moves.append(index + delta)
+
+                # validation step: loop through pseudo-legal moves
+                for destination in pseudo_legal_moves:
+                    if is_check:                                              # first round of filtering: checks
+                        if piece != friendly_king:                            # if this is not a king
+                            if not check['is_sliding']:                       # non-sliding checks must be captured
+                                if destination != check['checker_index']:     # if move doesn't capture checker
+                                    continue                                  # invalid move
+                            else:                                             # sliding checks may be blocked or captured
+                                if destination not in check['check_path']:    # if move doesn't block check
+                                    if destination != check['checker_index']: # if move doesn't capture checker
+                                        continue                              # invalid move
+
+                    if piece == friendly_king:                                # second round of filtering: king moves
+                        if destination in threat_map:                         # if square is attacked by enemy piece
+                            continue                                          # invalid move
+                    
+                    is_pinned = False                                         # third round of filtering: pins
+                    pin_info = None                                           # pin_info is a dict containing pin details
+                    for pin in pins:                                      
+                        if index == pin['pinned_piece_index']:                # if the current piece is pinned
+                            is_pinned = True
+                            pin_info = pin
+                            break                                             # stop loop after identifying the pin
+                    
+                    if is_pinned:
+                            if not (destination in pin_info['pin_path']):     # if the move leaves the pin's axis
+                                if destination != pin_info['pinner_index']:   # if the move doesn't capture the pinner
+                                    continue                                  # invalid move
+
+                    if board[destination] in friendly_pieces:                 # fourth round of filtering: friendly pieces
+                        continue                                              # can't land on square occupied by friend
+
+                    # if all four rounds of filtering passed, the move is legal
+                    if piece != friendly_pawn:                            # if this is not a pawn
+                        # define arguments for legal Move object creation
+                        moving_piece = piece
+                        source_index = index
+                        destination_index = destination
+                        if (board[destination] in enemy_pieces):
+                            piece_captured = board[destination]
+                        else:
+                            piece_captured = None
+                        is_en_passant = False
+                        is_castle = False
+                        
+                        # create legal Move object and append it to legal_moves
+                        legal_move = Move(
+                            position, moving_piece, source_index, destination_index,
+                            piece_captured, is_en_passant, is_castle
+                        )
+                        legal_moves.append(legal_move)
+
+                    elif piece == friendly_pawn:                          # if this is a pawn
+                        if destination == position.en_passant_square:     # if this is an en passant move
+                            # define arguments for new legal Move object creation
+                            moving_piece = piece
+                            source_index = index
+                            destination_index = destination
+                            piece_captured = enemy_pawn
+                            is_en_passant = True
+                            is_castle = False
+                            
+                            # create legal Move object and append it to legal moves
+                            legal_move = Move(
+                                position, moving_piece, source_index, destination_index,
+                                piece_captured, is_en_passant, is_castle
+                            )
+                            legal_moves.append(legal_move)
+                        elif destination in promotion_squares:            # if this is a promotion
+                            for new_piece in promotion_pieces:            # for all promotion-eligible pieces
+                                # define arguments for new legal Move object creation
+                                moving_piece = piece
+                                source_index = index
+                                destination_index = destination
+                                if (board[destination] in enemy_pieces):
+                                    piece_captured = board[destination]
+                                else:
+                                    piece_captured = None
+                                is_en_passant = is_castle = False
+                                promotion_piece = new_piece
+
+                                # create legal Move object and append it to legal_moves
+                                legal_move = Move(
+                                    position, moving_piece, source_index, destination_index,
+                                    piece_captured, is_en_passant, is_castle, promotion_piece
+                                )
+                                legal_moves.append(legal_move)
+
+                        else:                                             # if this is neither en passant nor a promotion
+                            # define arguments for new legal Move object creation
+                            moving_piece = piece
+                            source_index = index
+                            destination_index = destination
+                            if (board[destination] in enemy_pieces):
+                                piece_captured = board[destination]
+                            else:
+                                piece_captured = None
+                            is_en_passant = is_castle = False
+                        
+                            # create legal Move object and append it to legal_moves
+                            legal_move = Move(
+                                position, moving_piece, source_index, destination_index,
+                                piece_captured, is_en_passant, is_castle
+                            )
+                            legal_moves.append(legal_move)
+
+        # manually generate castling moves:
+        if castle_kingside:                                 # if kingside castling flag is True
+            if not is_check:                                # cannot castle when in check
+                castle_path_clear = True
+                for index in kingside_castle_path:          # loop through f1 and g1 (white) / f8 and g8 (black)
+                    if board[index] != EMPTY:               # if square is occupied
+                        castle_path_clear = False           # cannot castle
+                    if index in threat_map:                 # if square controlled by enemy piece
+                        castle_path_clear = False           # cannot castle
+
+                if castle_path_clear:
+                    # define arguments for new legal Move object creation
+                    moving_piece = friendly_king
+                    source_index = king_home_square
+                    destination_index = castle_kingside_destination
+                    piece_captured = None
+                    is_en_passant = False
+                    is_castle = True
+
+                    # create legal Move object and append it to legal_moves
+                    legal_move = Move(
+                        position, moving_piece, source_index, destination_index, 
+                        piece_captured, is_en_passant, is_castle
+                    )
+                    legal_moves.append(legal_move)
+
+        if castle_queenside:                                # if queenside castling flag is True
+            if not is_check:                                # cannot castle when in check
+                castle_path_clear = True
+                for index in queenside_castle_path:         # loop through b1, c1, and d1 (white) / b8, c8, and d8 (black)
+                    if board[index] != EMPTY:               # if square is ocupied
+                        castle_path_clear = False           # cannot castle
+                for index in queenside_king_castle_path:    # loop through c1 and d1 (white) / c8 and d8 (black)
+                    if index in threat_map:                 # if square controlled by enemy piece
+                        castle_path_clear = False           # cannot castle
+
+                if castle_path_clear:
+                    # define arguments for new legal Move object creation
+                    moving_piece = friendly_king
+                    source_index = king_home_square
+                    destination_index = castle_queenside_destination
+                    piece_captured = None
+                    is_en_passant = False
+                    is_castle = True
+                    
+                    # create legal Move object and append it to legal_moves
+                    legal_move = Move(
+                        position, moving_piece, source_index, destination_index, 
+                        piece_captured, is_en_passant, is_castle
+                    )
+                    legal_moves.append(legal_move)
+
+    elif check_count > 1:       # if double check, only king moves are valid
+        pseudo_legal_moves = king_moves(position, king_index)       # get pseudo-legal moves for the king
+        for destination in pseudo_legal_moves:
+            if destination in threat_map:                           # first round of filtering: enemy-controlled squares
+                continue
+            if board[destination] in friendly_pieces:               # second round of filtering: friendly-occupied squares
+                continue
+        
+            # if both rounds of filtering passed, move is valid
+            # define arguments for new legal Move object creation
+            moving_piece = friendly_king
+            source_index = king_index
+            destination_index = destination
+            if (board[destination] in enemy_pieces):
+                piece_captured = board[destination]
+            else:
+                piece_captured = None
+            is_en_passant = is_castle = False
+
+            # create legal Move object and append it to legal Moves
+            legal_move = Move(
+                position, moving_piece, source_index, destination_index, 
+                piece_captured, is_en_passant, is_castle
+            )
+            legal_moves.append(legal_move)
+
+    return legal_moves  # legal_moves now contains a Move object for all legal moves in this position
 
 # helper function for generate_moves()
 # returns an array of all enemy-controlled squares in a position
@@ -155,6 +440,7 @@ def get_checks_and_pins(position, source_index):
                         break
                     elif friendly_pieces_in_ray == 1:   # 1 friendly piece along ray, it's a pin
                         pin_found = True
+                        pin_dict['pinner_index'] = current_index
                         pin_dict['pinned_piece_index'] = closest_friendly_piece_index
                         pin_dict['pin_path'] = pin_path
                         break
@@ -184,7 +470,6 @@ def get_checks_and_pins(position, source_index):
             })
 
     return checks, pins
-
 
 # generate pseudo-legal target squares for non-sliding pieces, returns an array of all non-out-of-bounds squares
 def non_sliding_moves(position, source_index, deltas):   # used by kings and knights

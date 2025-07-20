@@ -33,22 +33,25 @@ class Board:
         
     # move is a Move object containing necessary informaton for making the move
     def make_move(self, move):
-        moving_piece = self.board[move.source_index]
+        moving_piece = move.moving_piece
         
         # MAKE THE MOVE
-        if (not move.is_en_passant) and (not move.is_castle):               # if not a special move
+        if (not move.is_en_passant) and (not move.is_castle):          # if not a special move
             # make the move
             self.board[move.source_index] = '#'
             self.board[move.destination_index] = moving_piece
+
+            if move.promotion_piece:                                   # if this is a promotion
+                self.board[move.destination_index] = move.promotion_piece
                     
-        elif move.is_en_passant:                                            # if move was en passant
+        elif move.is_en_passant:                                       # if move was en passant
             self.board[move.source_index] = '#'
             self.board[move.destination_index] = moving_piece
             
-            if self.color_to_play == 'white':                               # remove captured pawn
-                self.board[move.destination_index + 10] = '#'               # destination_index = previous en_passant_square value
+            if self.color_to_play == 'white':                          # remove captured pawn
+                self.board[move.destination_index + 10] = '#'          # destination_index = previous en_passant_square value
             else:
-                self.board[move.destination_index - 10] = '#'               # destination_index = previous en_passant_square value
+                self.board[move.destination_index - 10] = '#'          # destination_index = previous en_passant_square value
             
         # for castling moves move.destination_index will be the king's final square and is_castle flag will be True    
         elif move.is_castle:                                        # if move was to castle
@@ -126,7 +129,7 @@ class Board:
             
     # move is a Move object containing necessary information for unmaking the move
     def unmake_move(self, move):
-        moved_piece = self.board[move.destination_index]
+        moved_piece = move.moving_piece
         
         # UNMAKE THE MOVE
         if (not move.is_en_passant) and (not move.is_castle):           # if not a special move 
@@ -197,7 +200,9 @@ class Board:
 # used by generate_moves() during move validation and minimax() during game tree search
 class Move:
     def __init__(
-        self, position, moving_piece, source_index, destination_index, piece_captured, is_en_passant, is_castle):
+            self, position, moving_piece, source_index, destination_index, 
+            piece_captured, is_en_passant, is_castle, promotion_piece=None
+        ):
         # basic move information for making and unmaking
         self.moving_piece = moving_piece
         self.source_index = source_index
@@ -207,6 +212,7 @@ class Move:
         # special move flags
         self.is_en_passant = is_en_passant
         self.is_castle = is_castle
+        self.promotion_piece = promotion_piece
         
         # capture previous special move values for unmaking moves
         self.previous_white_castle_kingside = position.white_castle_kingside
