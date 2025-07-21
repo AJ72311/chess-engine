@@ -142,7 +142,7 @@ def generate_moves(position):
                         if index + delta == position.en_passant_square:
                             pseudo_legal_moves.append(index + delta)
 
-                # validation step: loop through pseudo-legal moves
+                # VALIDATION STEP: loop through pseudo-legal moves
                 for destination in pseudo_legal_moves:
                     if is_check:                                              # first round of filtering: checks
                         if piece != friendly_king:                            # if this is not a king
@@ -348,8 +348,10 @@ def get_threat_map(position, enemy_color):
                 threat_map += knight_moves(position, index)    # add the knight's moves to the threat map
             elif square == 'K':     # if white king
                 threat_map += king_moves(position, index)      # add the king's moves to the threat map
-            elif square == 'P':     # if white pawn
-                threat_map += white_pawn_moves(position, index)['attacks'] # add the pawn's moves to the threat map
+            elif square == 'P':     # if white pawn, don't use helper funct it doesn't include attacked empty squares
+                for delta in WHITE_PAWN_DELTAS['attacks']:  # add attacking pawn deltas manually
+                    if board[index + delta] != OUT_OF_BOUNDS:
+                        threat_map.append(index + delta)
 
         black_king_index = board.index('k')
         check_count = threat_map.count(black_king_index)    # used to detect double checks
@@ -366,8 +368,10 @@ def get_threat_map(position, enemy_color):
                 threat_map += knight_moves(position, index)    # add the knight's moves to the threat map
             elif square == 'k':     # if black king
                 threat_map += king_moves(position, index)      # add the king's moves to the threat map
-            elif square == 'p':     # if black pawn
-                threat_map += black_pawn_moves(position, index)['attacks'] # add the pawn's moves to the threat map
+            elif square == 'p':     # if black pawn, don't use helper funct it doesn't include attacked empty squares
+                for delta in BLACK_PAWN_DELTAS['attacks']:  # add attacking pawn deltas manually
+                    if board[index + delta] != OUT_OF_BOUNDS:
+                        threat_map.append(index + delta)
         
         white_king_index = board.index('K')
         check_count = threat_map.count(white_king_index)    # used to detect double checks
@@ -442,7 +446,7 @@ def get_checks_and_pins(position, source_index):
                         pin_found = True
                         pin_dict['pinner_index'] = current_index
                         pin_dict['pinned_piece_index'] = closest_friendly_piece_index
-                        pin_dict['pin_path'] = pin_path
+                        pin_dict['pin_path'] = pin_path + check_path
                         break
                 else:
                     break   # no pins or checks, exit loop
