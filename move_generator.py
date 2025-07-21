@@ -337,45 +337,59 @@ def get_threat_map(position, enemy_color):
     board = position.board
 
     if enemy_color == 'white':
-        for index, square in enumerate(board):
-            if square == 'B':       # if white bishop
-                threat_map += bishop_moves(position, index)    # add the bishop's moves to the threat map
-            elif square == 'R':     # if white rook
-                threat_map += rook_moves(position, index)      # add the rook's moves to the threat map
-            elif square == 'Q':     # if white queen
-                threat_map += queen_moves(position, index)     # add the queen's moves to the threat map
-            elif square == 'N':     # if white knight
-                threat_map += knight_moves(position, index)    # add the knight's moves to the threat map
-            elif square == 'K':     # if white king
-                threat_map += king_moves(position, index)      # add the king's moves to the threat map
-            elif square == 'P':     # if white pawn, don't use helper funct it doesn't include attacked empty squares
-                for delta in WHITE_PAWN_DELTAS['attacks']:  # add attacking pawn deltas manually
+        enemy_pieces = WHITE_PIECES
+        friendly_king = 'k'
+        enemy_pawn_deltas = WHITE_PAWN_DELTAS
+    else:
+        enemy_pieces = BLACK_PIECES
+        friendly_king = 'K'
+        enemy_pawn_deltas = BLACK_PAWN_DELTAS
+
+    for index, square in enumerate(board):
+        if square in enemy_pieces:
+            piece_type = square.lower()                         # convert all to lowercase to unify white / black logic
+
+            # NON-SLIDING PIECES:
+            if piece_type == 'n':                               # if enemy knight
+                threat_map += knight_moves(position, index)     # add the knight's moves to the threat map
+                continue
+            elif piece_type == 'k':                             # if enemy king
+                threat_map += king_moves(position, index)       # add the king's moves to the threat map
+                continue
+
+            # if enemy pawn, don't use helper funct, it doesn't include attacked empty squares    
+            elif piece_type == 'p':
+                for delta in enemy_pawn_deltas['attacks']:      # manually add pawn moves 
                     if board[index + delta] != OUT_OF_BOUNDS:
                         threat_map.append(index + delta)
+                continue
 
-        black_king_index = board.index('k')
-        check_count = threat_map.count(black_king_index)    # used to detect double checks
+            # SLIDING PIECES
+            deltas = None
+            if piece_type == 'b':       # if enemy bishop
+                deltas = BISHOP_DELTAS
+            if piece_type == 'r':       # if enemy rook
+                deltas = ROOK_DELTAS
+            if piece_type == 'q':       # if enemy queen
+                deltas = QUEEN_DELTAS
+            
+            for direction in deltas:
+                for delta in deltas[direction]:
+                    target_index = index + delta
+                    target_square = board[target_index]
 
-    elif enemy_color == 'black':
-        for index, square in enumerate(board):
-            if square == 'b':       # if black bishop
-                threat_map += bishop_moves(position, index)    # add the bishop's moves to the threat map
-            elif square == 'r':     # if black rook
-                threat_map += rook_moves(position, index)      # add the rook's moves to the threat map
-            elif square == 'q':     # if black queen
-                threat_map += queen_moves(position, index)     # add the queen's moves to the threat map
-            elif square == 'n':     # if black knight
-                threat_map += knight_moves(position, index)    # add the knight's moves to the threat map
-            elif square == 'k':     # if black king
-                threat_map += king_moves(position, index)      # add the king's moves to the threat map
-            elif square == 'p':     # if black pawn, don't use helper funct it doesn't include attacked empty squares
-                for delta in BLACK_PAWN_DELTAS['attacks']:  # add attacking pawn deltas manually
-                    if board[index + delta] != OUT_OF_BOUNDS:
-                        threat_map.append(index + delta)
-        
-        white_king_index = board.index('K')
-        check_count = threat_map.count(white_king_index)    # used to detect double checks
+                    if target_square == OUT_OF_BOUNDS:
+                        break           # stop this direction's loop
 
+                    threat_map.append(target_index)             # if not out of bounds, add to the threat map
+
+                    # if this square is occupied by a piece other than friendly king, stop this direction's loop
+                    # note: we don't stop at the friendly king to mark "x-ray" attacks
+                    if (target_square != EMPTY) and (target_square != friendly_king):
+                        break
+
+    friendly_king_index = board.index(friendly_king)
+    check_count = threat_map.count(friendly_king_index)         # how many times is our king attacked
     return threat_map, check_count
 
 # helper function for generate_moves()
@@ -550,7 +564,7 @@ def white_pawn_moves(position, source_index):   # en passant and promotion will 
 
     return destinations
 
-# generate pseudo-legal moves for black pawns, returns an dict with pseudo-legal attack and advance keys
+# generate pseudo-legal moves for black pawns, returns a dict with pseudo-legal attack and advance keys
 def black_pawn_moves(position, source_index):   # en passant and promotion will be handled in generate_moves()
     destinations = {
         'attacks': [],
