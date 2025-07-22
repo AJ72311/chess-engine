@@ -44,6 +44,7 @@ BLACK_PAWN_DELTAS = {
 def generate_moves(position):
     legal_moves = []        # initialize the final array of legal moves to return later
     board = position.board
+    piece_lists = position.piece_lists
     
     # define variables used in move generation logic
     if (position.color_to_play == 'white'):
@@ -93,7 +94,7 @@ def generate_moves(position):
 
     # get array of enemy-controlled squares and the number of checks in the position
     threat_map, check_count = get_threat_map(position, enemy_color)
-    king_index = board.index(friendly_king)
+    king_index = piece_lists[friendly_king][0]
 
     if check_count < 2:     # if not a double check
         checks, pins = get_checks_and_pins(position, king_index)    # arrays of check and pin dicts
@@ -116,8 +117,8 @@ def generate_moves(position):
             is_check = True
             check = checks[0]       # if is a check but len of checks array is < 2, there is only 1 element in checks
 
-        for index, piece in enumerate(board):
-            if piece in friendly_pieces:    # if this is a friendly-color piece
+        for piece in friendly_pieces:
+            for index in piece_lists[piece]:
                 # get pseudo-legal moves, each array includes all pseudo-legal destination squares                      
                 if piece == friendly_knight:
                     pseudo_legal_moves = knight_moves(position, index)
@@ -332,9 +333,10 @@ def generate_moves(position):
 # returns an array of all enemy-controlled squares in a position
 # additionally counts the number of checks found
 def get_threat_map(position, enemy_color):
-    check_count = 0     # used to detect if position has no checks, a single check, or a double check
-    threat_map = []     # an array containing all enemy-controlled squares, used for king move generation
+    check_count = 0         # used to detect if position has no checks, a single check, or a double check
+    threat_map = set()      # a set containing all enemy-controlled squares, used for king move generation
     board = position.board
+    piece_lists = position.piece_lists
 
     if enemy_color == 'white':
         enemy_pieces = WHITE_PIECES
@@ -344,52 +346,68 @@ def get_threat_map(position, enemy_color):
         enemy_pieces = BLACK_PIECES
         friendly_king = 'K'
         enemy_pawn_deltas = BLACK_PAWN_DELTAS
+    
+    # get the location of the friendly king
+    friendly_king_index = piece_lists[friendly_king][0] if piece_lists[friendly_king] else -1
 
-    for index, square in enumerate(board):
-        if square in enemy_pieces:
-            piece_type = square.lower()                         # convert all to lowercase to unify white / black logic
+    for piece_char in enemy_pieces:
+        for index in piece_lists[piece_char]:
+            piece_type = piece_char.lower()                         # convert all to lowercase to unify white / black logic
 
             # NON-SLIDING PIECES:
-            if piece_type == 'n':                               # if enemy knight
-                threat_map += knight_moves(position, index)     # add the knight's moves to the threat map
-                continue
-            elif piece_type == 'k':                             # if enemy king
-                threat_map += king_moves(position, index)       # add the king's moves to the threat map
-                continue
-
-            # if enemy pawn, don't use helper funct, it doesn't include attacked empty squares    
-            elif piece_type == 'p':
-                for delta in enemy_pawn_deltas['attacks']:      # manually add pawn moves 
-                    if board[index + delta] != OUT_OF_BOUNDS:
-                        threat_map.append(index + delta)
-                continue
-
-            # SLIDING PIECES
-            deltas = None
-            if piece_type == 'b':       # if enemy bishop
-                deltas = BISHOP_DELTAS
-            if piece_type == 'r':       # if enemy rook
-                deltas = ROOK_DELTAS
-            if piece_type == 'q':       # if enemy queen
-                deltas = QUEEN_DELTAS
-            
-            for direction in deltas:
-                for delta in deltas[direction]:
+            if piece_type == 'n':                                   # if enemy knight
+                for delta in KNIGHT_DELTAS:
                     target_index = index + delta
-                    target_square = board[target_index]
+                    if board[target_index] != OUT_OF_BOUNDS:        
+                        threat_map.add(target_index)                # add to the threat map
+                        if target_index == friendly_king_index:     # if the friendly king
+                            check_count += 1
+                continue                                            # skip sliding piece logic below
+            
+            elif piece_type == 'k':                                 # if enemy king
+                for delta in KING_DELTAS:
+                    target_index = index + delta
+                    if board[target_index] != OUT_OF_BOUNDS:
+                        threat_map.add(target_index)                # add to the threat map
+                        if target_index == friendly_king_index:     # if the friendly king
+                            check_count += 1
+                continue                                            # skip sliding piece logic below
+            
+            elif piece_type == 'p':                                 # if enemy pawn
+                for delta in enemy_pawn_deltas['attacks']:
+                    target_index = index + delta
+                    if board[target_index] != OUT_OF_BOUNDS:
+                        threat_map.add(target_index)                # add to the threat map
+                        if target_index == friendly_king_index:     # if the friendly king
+                            check_count += 1
+                continue                                            # skip sliding piece logic below
+            
+            # SLIDING PIECES
+            # determine which sliding piece deltas to use
+            deltas = None
+            if piece_type == 'b': deltas = BISHOP_DELTAS
+            elif piece_type == 'r': deltas = ROOK_DELTAS
+            elif piece_type == 'q': deltas = QUEEN_DELTAS
 
-                    if target_square == OUT_OF_BOUNDS:
-                        break           # stop this direction's loop
+            # loop through each direction until hitting board boundary or another piece
+            if deltas:
+                for direction in deltas:
+                    for delta in deltas[direction]:
+                        target_index = index + delta
+                        target_square = board[target_index]
 
-                    threat_map.append(target_index)             # if not out of bounds, add to the threat map
+                        if target_square == OUT_OF_BOUNDS:
+                            break
 
-                    # if this square is occupied by a piece other than friendly king, stop this direction's loop
-                    # note: we don't stop at the friendly king to mark "x-ray" attacks
-                    if (target_square != EMPTY) and (target_square != friendly_king):
-                        break
+                        threat_map.add(target_index)            # if within board bounds, add to the threat map
+                        if target_index == friendly_king_index: # if the friendly king
+                            check_count += 1
 
-    friendly_king_index = board.index(friendly_king)
-    check_count = threat_map.count(friendly_king_index)         # how many times is our king attacked
+                        # if we encountered a piece that is not the friendly king, exit this direction's loop
+                        # note: we don't stop at the friendly king in order to completely map "x-ray" check attacks
+                        if (target_square != EMPTY) and (target_square != friendly_king):
+                            break   
+
     return threat_map, check_count
 
 # helper function for generate_moves()

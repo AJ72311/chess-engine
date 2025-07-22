@@ -18,12 +18,12 @@ ALGEBRAIC_TO_INDEX = {v: k for k, v in INDEX_TO_ALGEBRAIC.items()}
 
 # converts a move object into a simplified algebraic notation (eg. e2e4, e7e8q, etc.)
 def move_to_algebraic(move):
-    source_sq = INDEX_TO_ALGEBRAIC.get(move.source_index, '??')     # get the move's source index
-    dest_sq = INDEX_TO_ALGEBRAIC.get(move.destination_index, '??')  # get the move's destination index
+    source_sq = INDEX_TO_ALGEBRAIC.get(move.source_index, '??')
+    dest_sq = INDEX_TO_ALGEBRAIC.get(move.destination_index, '??')
 
     promotion_char = ''                                               
-    if move.promotion_piece:                            # if this move is a promotion
-        promotion_char = move.promotion_piece.lower()   # set to lower case for consistency in white vs. black moves
+    if move.promotion_piece:
+        promotion_char = move.promotion_piece.lower()
     
     return f'{source_sq}{dest_sq}{promotion_char}'
 
@@ -68,16 +68,19 @@ def board_to_fen(board):
     return fen
 
 # sets up a Board object from a FEN string
-# note: this assumes a valid FEN
 def set_board_from_fen(board, fen_string):
     parts = fen_string.split(' ')
+    if len(parts) != 6:
+        print(f"Error: Invalid FEN string. Expected 6 fields, but got {len(parts)}.")
+        return
+
     piece_placement = parts[0]
     
-    new_board = list(board.board) # Start with a copy of the template
+    new_board = list(board.board)
     board_index = 21
     for char in piece_placement:
         if char == '/':
-            board_index += 2 # Go to the start of the next rank
+            board_index += 2
         elif char.isdigit():
             for i in range(int(char)):
                 new_board[board_index] = '#'
@@ -103,37 +106,41 @@ def set_board_from_fen(board, fen_string):
     if board.color_to_play == 'black':
         board.ply += 1
 
+    # 1. Clear the old piece lists from the starting position
+    for piece in board.piece_lists:
+        board.piece_lists[piece].clear()
+    
+    # 2. Re-populate the piece lists based on the new board state
+    board.initialize_piece_lists()
+
+
 # recursively calcuates the number of leaf nodes at a given depth
 def perft(board, depth):
-    # base case, if depth is 0 we are at a leaf node, return 1 to count it
     if depth == 0:
         return 1
     
-    nodes = 0                              # initialize nodes resulting from the current position's game tree
+    nodes = 0
     legal_moves = generate_moves(board)
 
     for move in legal_moves:
         board.make_move(move)
-        nodes += perft(board, depth - 1)   # recursive call, add total nodes resulting from move's game sub-tree to nodes
+        nodes += perft(board, depth - 1)
         board.unmake_move(move)
 
     return nodes
 
 # runs a perft test to a set depth for each move possible in a given position
 def divide(board, depth):
-    if depth <= 0:  # depth has to be greater than 0
+    if depth <= 0:
         print('Depth must be greater than 0 for a divide')
         return
 
     print(f'--- Divide for Depth {depth} ---')
+    print(f"--- FEN: {board_to_fen(board)} ---")
 
-    # log start time for speed perfomance testing
     start_time = time.time()
-
     total_nodes = 0
     legal_moves = generate_moves(board)
-
-    # sort move list for consistent output, comparison against established results
     sorted_moves = sorted(legal_moves, key=lambda m: (m.source_index, m.destination_index))
 
     for move in sorted_moves:
@@ -143,7 +150,6 @@ def divide(board, depth):
         board.unmake_move(move)
         print(f'{move_to_algebraic(move)}: {nodes}')
 
-    # log end time for speed performance testing
     end_time = time.time()
     elapsed_time = end_time - start_time
     nodes_per_second = total_nodes / elapsed_time if elapsed_time > 0 else 0
@@ -155,12 +161,12 @@ def divide(board, depth):
     print(f'Nodes per Second: {nodes_per_second:,.2f}')
 
 if __name__ == '__main__':
-    TEST_DEPTH = 5              # depth to search during tests
-    test_board = Board()        # create a Board object for testing, represents the starting position
+    TEST_DEPTH = 5
+    test_board = Board()
 
-    FEN_STRING = ''
+    FEN_STRING = 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'
 
     if FEN_STRING:
         set_board_from_fen(test_board, FEN_STRING)
 
-    divide(test_board, TEST_DEPTH)  # run the test
+    divide(test_board, TEST_DEPTH)
