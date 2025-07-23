@@ -327,7 +327,7 @@ def generate_moves(position):
             )
             legal_moves.append(legal_move)
 
-    return legal_moves  # legal_moves now contains a Move object for all legal moves in this position
+    return legal_moves, check_count  # legal_moves now contains a Move object for all legal moves in this position
 
 # helper function for generate_moves()
 # returns an array of all enemy-controlled squares in a position

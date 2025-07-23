@@ -122,7 +122,7 @@ def perft(board, depth):
         return 1
     
     nodes = 0       # initialize nodes resulting from the current position's game tree
-    legal_moves = generate_moves(board)
+    legal_moves = generate_moves(board)[0]
 
     for move in legal_moves:
         board.make_move(move)
@@ -144,7 +144,7 @@ def divide(board, depth):
     start_time = time.time()
 
     total_nodes = 0
-    legal_moves = generate_moves(board)
+    legal_moves = generate_moves(board)[0]
 
     # sort move list for consistent output, streamlined comparison against established results
     sorted_moves = sorted(legal_moves, key=lambda m: (m.source_index, m.destination_index))
