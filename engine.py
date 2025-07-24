@@ -5,10 +5,27 @@ from move_generator import generate_moves
 # ----------------------------------- RECURSIVE GAME TREE EXPLORATION, FINDING BEST MOVE -----------------------------------
 INFINITY = float('inf') # infinity constant
 
+# used in MVV-LVA move-ordering, king value as highest b/c we want king captures to be attempted last
+PIECE_VALUES = {'k': 10, 'q': 9, 'r': 5, 'b': 3.3, 'n': 3.2, 'p': 1}     
+
+# MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
+# captures should be searched first, so they get a high base sorting score of 1000
+# MVV-LVA: use weakest friendly piece to capture most valuable enemy piece: score = victim_value - attacker_value
+def score_move(move):
+    if move.piece_captured:
+        victim_value = PIECE_VALUES[move.piece_captured.lower()]
+        attacker_value = PIECE_VALUES[move.moving_piece.lower()]
+        return 1000 + victim_value - attacker_value
+    else:
+        return 100  # temporary base score for non-captures, will be changed later
+
 # helper function for minimax, returns the move with the most favorable evaluation for the provided color_to_play
-def find_best_move(root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, depth = 5):
-    legal_moves = generate_moves(root_node)[0] # Look into move-ordering for this
+def find_best_move(root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, depth = 6):
+    legal_moves = generate_moves(root_node)[0] # all legal moves
     best_move = None
+        
+    # sort legal moves based on move-ordering score in descending order
+    legal_moves.sort(key=score_move, reverse=True)
 
     # white to move
     if color_to_play == 'white':
@@ -46,7 +63,10 @@ def find_best_move(root_node, color_to_play, alpha = -INFINITY, beta = INFINITY,
     
 def minimax(current_position, alpha, beta, color_to_play, depth):
     # generate all legal moves and count the number of checks in the position
-    legal_moves, check_count = generate_moves(current_position) # Look into move-ordering for this
+    legal_moves, check_count = generate_moves(current_position) # all legal moves
+        
+    # sort legal moves based on move-ordering score in descending order
+    legal_moves.sort(key=score_move, reverse=True)
 
     # BASE CASE: checkmate, stalemate, or depth = 0
     if len(legal_moves) == 0:           # if no legal moves

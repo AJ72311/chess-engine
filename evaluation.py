@@ -219,32 +219,32 @@ def evaluate_position(position):
                 w_mg_eval += 100 + MG_PAWN_PST[index_64]
                 w_eg_eval += 100 + EG_PAWN_PST[index_64]
                     
-        for piece in BLACK_PIECES:
-            for index in piece_lists[piece]:
-                flipped_index = FLIP[index]     # flip index to adjust PST from white's perspective to black's
-                index_64 = TO_64[flipped_index] # convert index to 64-square array for PST lookups
-                if piece == 'k':
-                    b_mg_eval += 20000 + MG_KING_PST[index_64]
-                    b_eg_eval += 20000 + EG_KING_PST[index_64]
-                elif piece == 'q':
-                    b_mg_eval += 900 + MG_QUEEN_PST[index_64]
-                    b_eg_eval += 900 + EG_QUEEN_PST[index_64]
-                    game_phase += 4
-                elif piece == 'r':
-                    b_mg_eval += 500 + MG_ROOK_PST[index_64]
-                    b_eg_eval += 500 + EG_ROOK_PST[index_64]
-                    game_phase += 2
-                elif piece == 'b':
-                    b_mg_eval += 330 + MG_BISHOP_PST[index_64]
-                    b_eg_eval += 330 + EG_BISHOP_PST[index_64]
-                    game_phase += 1
-                elif piece == 'n':
-                    b_mg_eval += 320 + MG_KNIGHT_PST[index_64]
-                    b_eg_eval += 320 + EG_KNIGHT_PST[index_64]
-                    game_phase += 1
-                elif piece == 'p':
-                    b_mg_eval += 100 + MG_PAWN_PST[index_64]
-                    b_eg_eval += 100 + EG_PAWN_PST[index_64]
+    for piece in BLACK_PIECES:
+        for index in piece_lists[piece]:
+            flipped_index = FLIP[index]     # flip index to adjust PST from white's perspective to black's
+            index_64 = TO_64[flipped_index] # convert index to 64-square array for PST lookups
+            if piece == 'k':
+                b_mg_eval += 20000 + MG_KING_PST[index_64]
+                b_eg_eval += 20000 + EG_KING_PST[index_64]
+            elif piece == 'q':
+                b_mg_eval += 900 + MG_QUEEN_PST[index_64]
+                b_eg_eval += 900 + EG_QUEEN_PST[index_64]
+                game_phase += 4
+            elif piece == 'r':
+                b_mg_eval += 500 + MG_ROOK_PST[index_64]
+                b_eg_eval += 500 + EG_ROOK_PST[index_64]
+                game_phase += 2
+            elif piece == 'b':
+                b_mg_eval += 330 + MG_BISHOP_PST[index_64]
+                b_eg_eval += 330 + EG_BISHOP_PST[index_64]
+                game_phase += 1
+            elif piece == 'n':
+                b_mg_eval += 320 + MG_KNIGHT_PST[index_64]
+                b_eg_eval += 320 + EG_KNIGHT_PST[index_64]
+                game_phase += 1
+            elif piece == 'p':
+                b_mg_eval += 100 + MG_PAWN_PST[index_64]
+                b_eg_eval += 100 + EG_PAWN_PST[index_64]
     
     # find interpolated evaluations for white and black based on game phase
     game_phase = min(game_phase, max_phase)     # cap game_phase at 24 (in case of early promotions)
