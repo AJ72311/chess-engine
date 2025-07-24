@@ -1,4 +1,4 @@
-from engine import find_best_move
+from engine import Search
 from board import Board, Move
 from move_generator import generate_moves
 import time
@@ -79,6 +79,7 @@ def parse_user_move(input_str, legal_moves):
 # MAIN GAME LOOP
 def play_game(human_color='white'):
     board = Board()
+    search = Search()
     engine_color = 'black' if human_color == 'white' else 'white'
 
     while True:
@@ -114,7 +115,7 @@ def play_game(human_color='white'):
         else:
             print(f'Engine ({engine_color}) is thinking...')
             start_time = time.time()                            # log time for performance testing
-            engine_move = find_best_move(board, engine_color)   # find the best move
+            engine_move = search.find_best_move(board, engine_color)   # find the best move
             end_time = time.time()                              # log end time
 
             print(f'Engine found move in {end_time - start_time:.2f} seconds.')
