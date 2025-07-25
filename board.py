@@ -1,5 +1,40 @@
-# -------------------------- BOARD AND MOVE CLASSES: BOARD REPRESENTATION, MAKING / UNMAKING MOVES --------------------------
+import random
 
+# GLOBAL VARIABLES
+# used to convert the 120-length position.board index to a 64-square index for Zobrist hash calculations
+TO_64 = [
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1,  0,  1,  2,  3,  4,  5,  6,  7, -1,
+    -1,  8,  9, 10, 11, 12, 13, 14, 15, -1,
+    -1, 16, 17, 18, 19, 20, 21, 22, 23, -1,
+    -1, 24, 25, 26, 27, 28, 29, 30, 31, -1,
+    -1, 32, 33, 34, 35, 36, 37, 38, 39, -1,
+    -1, 40, 41, 42, 43, 44, 45, 46, 47, -1,
+    -1, 48, 49, 50, 51, 52, 53, 54, 55, -1,
+    -1, 56, 57, 58, 59, 60, 61, 62, 63, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+]
+
+PIECE_CODES = {         # used to map each piece to an array index in zorbist table for pieces
+    'P': 0, 'N': 1, 'B': 2, 'R': 3, 'Q': 4, 'K': 5, 
+    'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11
+}
+
+# global random Zobrist values, 64-bit ints, used to compute init. position's hash & incremented with XORs when making moves
+random.seed(0)      # for reproducibility
+
+# unique int for each piece-square combination: 12 pieces (6 white + 6 black), 64 board squares
+ZOBRIST_PIECE_KEYS = [[random.getrandbits(64) for _ in range(12)] for _ in range(64)]
+# castling rights: 16 possibilities
+ZOBRIST_CASTLING_KEYS = [random.getrandbits(64) for _ in range(16)]
+# en passant file keys: 8 files
+ZOBRIST_EP_KEYS = [random.getrandbits(64) for _ in range(8)]
+# side to move key
+ZOBRIST_COLOR_KEY = random.getrandbits(64)
+
+# BOARD AND MOVE CLASSES
 class Board:
     def __init__(self):
         # board_representation, uppercase letters for white, lowercase for black
@@ -36,51 +71,97 @@ class Board:
             'k': [], 'q': [], 'r': [], 'b': [], 'n': [], 'p': []
         }
         
-        self.initialize_piece_lists()       # initialize piece list indices
+        self.initialize_piece_lists()            # initialize piece list indices
+        self.zobrist_hash = self.compute_hash()  # a hash of the position, used in engine.py's transposition table
     
     # sets the initial index for each piece on the board
     def initialize_piece_lists(self):
         for index, piece in enumerate(self.board):
             if piece != '#' and piece != -1:
                 self.piece_lists[piece].append(index)
+
+    def compute_hash(self):                      # computes a Zobrist hash based on global Zobrist tables
+        hash = 0        # start at 0, updated with XORs
+
+        # STEP 1: piece updates
+        for piece_type in self.piece_lists:
+            for sq_index in self.piece_lists[piece_type]:
+                outer_index = TO_64[sq_index]
+                inner_index = PIECE_CODES[piece_type]
+                hash ^= ZOBRIST_PIECE_KEYS[outer_index][inner_index]    # update hash
+
+        # STEP 2: castling right updates
+        index_code = self.get_castle_rights_code()
+        hash ^= ZOBRIST_CASTLING_KEYS[index_code]           # update hash
+
+        # STEP 3: en passant updates
+        if self.en_passant_square:
+            ep_square = TO_64[self.en_passant_square]
+            ep_file = ep_square % 8     # for 0 to 7
+            hash ^= ZOBRIST_EP_KEYS[ep_file]
+
+        # STEP 4: color to play updates
+        hash ^= ZOBRIST_COLOR_KEY       # XOR regardless of color to toggle hash at each ply
+
+        return hash
+    
+    # helper function to map each castling right combination to a Zobrist index code from 0-15 using bitwise OR
+    def get_castle_rights_code(self):
+        index_code = 0
+
+        if self.white_castle_kingside: index_code |= 1      # set bit 0
+        if self.white_castle_queenside: index_code |= 2     # set bit 1
+        if self.black_castle_kingside: index_code |= 4      # set bit 2
+        if self.black_castle_queenside: index_code |= 8     # set bit 3
+
+        return index_code
         
     # move is a Move object containing necessary informaton for making the move
     def make_move(self, move):
         moving_piece = move.moving_piece
         piece_captured = move.piece_captured
         
-        # MAKE THE MOVE
-        if (not move.is_en_passant) and (not move.is_castle):          # if not a special move
+        # MAKE THE MOVE, UPDATE PIECE LISTS / ZOBRIST HASH
+        if (not move.is_en_passant) and (not move.is_castle): # if not a special move
             # make the move
             self.board[move.source_index] = '#'
             self.board[move.destination_index] = moving_piece
+
+            self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.source_index]][PIECE_CODES[moving_piece]]
             
-            # remove source_index from the moving piece's piece list
             self.piece_lists[moving_piece].remove(move.source_index)
             
-            # remove the captured piece (if any) from its piece list
+            # remove the captured piece (if any) from its piece list and XOR it out of hash
             if piece_captured:
-                self.piece_lists[piece_captured].remove(move.destination_index)    
+                self.piece_lists[piece_captured].remove(move.destination_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES[move.piece_captured]]    
 
-            if move.promotion_piece:                                                  # if this is a promotion
+            if move.promotion_piece: # if this is a promotion
                 self.board[move.destination_index] = move.promotion_piece
-                self.piece_lists[move.promotion_piece].append(move.destination_index) # add dest index to promotion piecelist 
+                self.piece_lists[move.promotion_piece].append(move.destination_index) 
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES[move.promotion_piece]]
             else:
-                self.piece_lists[moving_piece].append(move.destination_index)         # add dest index to moving piecelist
+                self.piece_lists[moving_piece].append(move.destination_index)         # add dest index to moving piece list
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES[moving_piece]] 
                     
-        elif move.is_en_passant:                                       # if move was en passant
+        elif move.is_en_passant: # if move was en passant
             self.board[move.source_index] = '#'
             self.board[move.destination_index] = moving_piece
             
             self.piece_lists[moving_piece].remove(move.source_index)
             self.piece_lists[moving_piece].append(move.destination_index)
+
+            self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.source_index]][PIECE_CODES[moving_piece]]
+            self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES[moving_piece]]
             
             if self.color_to_play == 'white':                          # remove captured pawn
-                self.board[move.destination_index + 10] = '#'          # destination_index = previous en_passant_square value
+                self.board[move.destination_index + 10] = '#'          # destination_index = previous en_passant_square val
                 self.piece_lists[piece_captured].remove(move.destination_index + 10)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index + 10]][PIECE_CODES[move.piece_captured]]
             else:
-                self.board[move.destination_index - 10] = '#'          # destination_index = previous en_passant_square value
+                self.board[move.destination_index - 10] = '#'          # destination_index = previous en_passant_square val
                 self.piece_lists[piece_captured].remove(move.destination_index - 10)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index - 10]][PIECE_CODES[move.piece_captured]]
             
         # for castling moves move.destination_index will be the king's final square and is_castle flag will be True    
         elif move.is_castle:                                        # if move was to castle
@@ -88,57 +169,73 @@ class Board:
                 # move king to g1
                 self.board[move.destination_index] = 'K'            
                 self.piece_lists['K'].append(move.destination_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES['K']]
                 # remove king from home square
                 self.board[move.source_index] = '#'                 
                 self.piece_lists['K'].remove(move.source_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.source_index]][PIECE_CODES['K']]
                 # remove rook from h1
                 self.board[98] = '#'
                 self.piece_lists['R'].remove(98)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[98]][PIECE_CODES['R']]
                 # bring rook f1
                 self.board[96] = 'R'                                
                 self.piece_lists['R'].append(96)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[96]][PIECE_CODES['R']]
                 
             elif move.destination_index == 93:                      # if white is castling queenside
                 # move king to c1
                 self.board[move.destination_index] = 'K'    
                 self.piece_lists['K'].append(move.destination_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES['K']]
                 # remove king from home square
                 self.board[move.source_index] = '#'
                 self.piece_lists['K'].remove(move.source_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.source_index]][PIECE_CODES['K']]
                 # remove rook from a1
                 self.board[91] = '#'   
                 self.piece_lists['R'].remove(91)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[91]][PIECE_CODES['R']]
                 # bring rook to d1
                 self.board[94] = 'R'    
                 self.piece_lists['R'].append(94)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[94]][PIECE_CODES['R']]
                 
             elif move.destination_index == 27:                      # if black is castling kingside
                 # move king to g8
                 self.board[move.destination_index] = 'k'
                 self.piece_lists['k'].append(move.destination_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES['k']]
                 # remove king from home square
                 self.board[move.source_index] = '#'
                 self.piece_lists['k'].remove(move.source_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.source_index]][PIECE_CODES['k']]
                 # remove rook from h8
                 self.board[28] = '#'
                 self.piece_lists['r'].remove(28)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[28]][PIECE_CODES['r']]
                 # bring rook to f8
                 self.board[26] = 'r'
                 self.piece_lists['r'].append(26)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[26]][PIECE_CODES['r']]
                 
             elif move.destination_index == 23:                      # if black is castling queenside
                 # move king to c8
                 self.board[move.destination_index] = 'k'
                 self.piece_lists['k'].append(move.destination_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.destination_index]][PIECE_CODES['k']]
                 # remove king from home square
                 self.board[move.source_index] = '#'
                 self.piece_lists['k'].remove(move.source_index)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[move.source_index]][PIECE_CODES['k']]
                 # remove rook from a8
                 self.board[21] = '#'
                 self.piece_lists['r'].remove(21)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[21]][PIECE_CODES['r']]
                 # bring rook to d8
                 self.board[24] = 'r'
                 self.piece_lists['r'].append(24)
+                self.zobrist_hash ^= ZOBRIST_PIECE_KEYS[TO_64[24]][PIECE_CODES['r']]
         
         # UPDATE GAME STATE VALUES
         self.ply += 1
@@ -148,26 +245,43 @@ class Board:
             self.color_to_play = 'black'
         else:
             self.color_to_play = 'white'
+        self.zobrist_hash ^= ZOBRIST_COLOR_KEY      # toggle color to play in Zobrist hash
         
         # update 50-move-rule counter
-        if moving_piece.lower() == 'p' or move.piece_captured != None:              # if a pawn move or capture                        
+        if moving_piece.lower() == 'p' or move.piece_captured != None:            # if a pawn move or capture
             self.half_move = 0    
         else:
             self.half_move += 1
         
         # reset en passant square 
-        self.en_passant_square = None                                                # null by default
-        if moving_piece == 'P':                                                      # if white pawn moved
-            if move.source_index >= 81 and move.source_index <= 88:                  # if pawn started on home square
-                if move.destination_index >= 61 and move.destination_index <= 68:    # if pawn made 2-square advance
-                    self.en_passant_square = move.destination_index + 10             # en passant target 1 square below dest
+        # first, XOR-out the old en passant square from Zobrist hash
+        if self.en_passant_square:
+            ep_square = TO_64[self.en_passant_square]
+            ep_file = ep_square % 8     # for 0 to 7
+            self.zobrist_hash ^= ZOBRIST_EP_KEYS[ep_file]
 
-        elif moving_piece == 'p':                                                    # if black pawn moved
-            if move.source_index >= 31 and move.source_index <= 38:                  # if pawn started on home square
-                if move.destination_index >= 51 and move.destination_index <= 58:    # if pawn made 2-square advance
-                    self.en_passant_square = move.destination_index - 10             # en passant target 1 square above dest
+        self.en_passant_square = None                                             # null by default
+        if moving_piece == 'P':                                                   # if white pawn moved
+            if move.source_index >= 81 and move.source_index <= 88:               # if pawn started on home square
+                if move.destination_index >= 61 and move.destination_index <= 68: # if pawn made 2-square advance
+                    self.en_passant_square = move.destination_index + 10          # en passant target 1 square below dest
+
+        elif moving_piece == 'p':                                                 # if black pawn moved
+            if move.source_index >= 31 and move.source_index <= 38:               # if pawn started on home square
+                if move.destination_index >= 51 and move.destination_index <= 58: # if pawn made 2-square advance
+                    self.en_passant_square = move.destination_index - 10          # en passant target 1 square above dest
+
+        # XOR-in new en passant square to Zobrist hash
+        if self.en_passant_square:
+            ep_square = TO_64[self.en_passant_square]
+            ep_file = ep_square % 8     # for 0 to 7
+            self.zobrist_hash ^= ZOBRIST_EP_KEYS[ep_file]
                     
         # reset castling rights
+        # first, XOR-out the current castle rights from Zobrist hash
+        index_code = self.get_castle_rights_code()
+        self.zobrist_hash ^= ZOBRIST_CASTLING_KEYS[index_code]
+
         if move.is_castle:                                      # if the move was to castle
             if moving_piece == 'K':                             # if white castled
                 self.white_castle_kingside = False
@@ -189,7 +303,11 @@ class Board:
             if self.board[28] != "r":                           # if h8 square is not a black rook
                 self.black_castle_kingside = False              
             if self.board[21] != "r":                           # if a8 square is not a black rook
-                self.black_castle_queenside = False            
+                self.black_castle_queenside = False   
+        
+        # XOR-in the current castle rights to Zobrist hash
+        index_code = self.get_castle_rights_code()
+        self.zobrist_hash ^= ZOBRIST_CASTLING_KEYS[index_code]
             
     # move is a Move object containing necessary information for unmaking the move
     def unmake_move(self, move):
@@ -298,11 +416,8 @@ class Board:
         self.black_castle_kingside = move.previous_black_castle_kingside
         self.black_castle_queenside = move.previous_black_castle_queenside
 
-    def is_checkmate(self):     # returns a boolean
-        pass
-    
-    def is_stalemate(self):     # returns a boolean
-        pass
+        # revert Zobrist hash
+        self.zobrist_hash = move.previous_zobrist_hash
     
     def fifty_move_criteria_met(self):      # checks if criteria for fifty move rule have been met
         return self.half_move == 100
@@ -333,3 +448,4 @@ class Move:
         self.previous_en_passant_square = position.en_passant_square
         self.previous_half_move = position.half_move
         self.previous_color_to_play = position.color_to_play
+        self.previous_zobrist_hash = position.zobrist_hash

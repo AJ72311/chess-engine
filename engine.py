@@ -17,7 +17,7 @@ HISTORY_OUTER_INDICES = {
 
 # the Search class contains minimax's wrapper function find_best_move(), this is the algorithm for exploring the game tree
 class Search:
-    def __init__(self, depth=6):    # initialize depth move-ordering heuristics
+    def __init__(self, depth=6):    # initialize depth, move-ordering heuristics
         self.depth = depth
 
         # KILLER TABLE: at each depth, store 'killer' moves: extremely strong quiet moves in sibling node
