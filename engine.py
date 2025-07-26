@@ -27,17 +27,26 @@ class Search:
         # HISTORY TABLE: stores moves that caused beta cutoffs for use in move-ordering, bonus given for higher depths
         # for each piece type, store a score for all possible destination squares, update when a move creates a beta cutoff
         # all initial scores are 0, bonuses are added based on depth-squared
-        self.history_table = [[0] * 120 for _ in range(12)]      
+        self.history_table = [[0] * 120 for _ in range(12)]  
+
+        # TRANSPOSITION TABLE: a hash table of previously encountered positions
+        # if position was fully evaluated, skip the branch, otherwise update alpha/beta if it tightens the search window
+        self.transposition_table = {} 
 
     # MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
-    def score_move(self, move, depth):
-        if move.piece_captured:             # highest priority: captures, MVV-LVA
+    def score_move(self, move, depth, hash_move=None):
+        if hash_move is not None and move == hash_move:     # top priority: hash moves from transposition table
+            return 2000
+        
+        elif move.piece_captured:                           # 2nd priority: captures, MVV-LVA
             victim_value = PIECE_VALUES[move.piece_captured.lower()]
             attacker_value = PIECE_VALUES[move.moving_piece.lower()]
             return 1000 + victim_value - attacker_value
-        elif move in self.killer_table[depth]:   # 2nd priority: quiet 'killer' moves
+        
+        elif move in self.killer_table[depth]:              # 3rd priority: quiet 'killer' moves
             return 900
-        else:                               # last priority, use history table score 
+        
+        else:                                               # last priority, use history table score 
             # determine moving piece's history-table index 
             pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
             return self.history_table[pc_type_index][move.destination_index]    
@@ -52,6 +61,7 @@ class Search:
             
         # sort legal moves based on move-ordering score in descending order
         # sorting priority: captures w/ MVV-LVA -> killer moves -> history table score
+        # note: hash moves are not used at the root
         legal_moves.sort(key=lambda move: self.score_move(move, depth), reverse=True)
 
         # SET-UP MINIMAX RECURSION
@@ -111,6 +121,7 @@ class Search:
     def minimax(self, current_position, alpha, beta, color_to_play, depth):
         history_table = self.history_table
         killer_table = self.killer_table
+        transposition_table = self.transposition_table
 
         # generate all legal moves and count the number of checks in the position
         legal_moves, check_count = generate_moves(current_position) # all legal moves
@@ -130,19 +141,51 @@ class Search:
             return evaluate_position(current_position)
         
         # RECURSIVE CASE: 
+        original_alpha = alpha
+        original_beta = beta
+
+        # before searching, check transposition table for previous encounters of this position
+        hash_move = None    # the strongest move to be retrieved from the transposition table for precise move-ordering 
+        position_hash = current_position.zobrist_hash
+        if position_hash in transposition_table:
+            entry = transposition_table[position_hash]
+            stored_eval = entry['eval']
+            stored_depth = entry['depth']
+            stored_flag = entry['flag']
+            if 'best_move' in entry:
+                hash_move = entry['best_move']
+
+            if stored_depth >= depth:               # only trust evals from depths >= current depth
+                if stored_flag == 'EXACT':          # node was evaluated to the leaves, evaluation is exact
+                    return stored_eval
+                elif stored_flag == 'LOWERBOUND':   # beta cut-off occured
+                    if stored_eval > alpha:         # if stored eval is greater than alpha, update alpha to it
+                        alpha = stored_eval
+                elif stored_flag == 'UPPERBOUND':   # alpha was never improved
+                    if stored_eval < beta:          # if stored eval is lower than beta, update beta to it
+                        beta = stored_eval
+                    
+                if alpha >= beta:                   # if updated alpha/beta vals now meet the pruning condition
+                    return stored_eval
+
+        # if transposition table didn't contain position, or didn't sufficiently tighten alpha/beta window, proceed
         # sort legal moves based on move-ordering score in descending order
-        # sorting priority: captures w/ MVV-LVA -> killer moves -> history table score
-        legal_moves.sort(key=lambda move: self.score_move(move, depth), reverse=True)
+        # sorting priority: hash move -> captures w/ MVV-LVA -> killer moves -> history table score
+        legal_moves.sort(key=lambda move: self.score_move(move, depth, hash_move), reverse=True)
 
         if color_to_play == 'white': # white to move
             max_eval = -INFINITY
+            best_move = None         # track best move to store in TT for move-ordering
 
             for move in legal_moves:
                 current_position.make_move(move)
                 returned_eval = self.minimax(current_position, alpha, beta, 'black', depth - 1)  # recursive call
                 current_position.unmake_move(move)
 
-                max_eval = max(max_eval, returned_eval)
+                if returned_eval > max_eval:
+                    max_eval = returned_eval
+                    best_move = move
+
                 alpha = max(alpha, returned_eval)
 
                 if alpha >= beta:   # beta cut-off, update killer and history tables, break
@@ -157,17 +200,37 @@ class Search:
                         history_table[pc_type_index][dest] += depth * depth
                     break
 
+            # after search completion, update transposition table
+            if max_eval <= original_alpha:      # alpha was never raised
+                flag = 'UPPERBOUND'
+            elif max_eval >= beta:              # a beta cutoff occurred
+                flag = 'LOWERBOUND'
+            else:                               # search was completed with improvements in alpha and no beta cutoffs
+                flag = 'EXACT'
+            
+            # create new entry / update existing entry in transposition table
+            transposition_table[position_hash] = {
+                'eval': max_eval,
+                'depth': depth,
+                'flag': flag,
+                'best_move': best_move
+            }
+
             return max_eval
 
         else: # black to move
             min_eval = INFINITY
+            best_move = None     # track the best move to store in TT for move-ordering
 
             for move in legal_moves:
                 current_position.make_move(move)
                 returned_eval = self.minimax(current_position, alpha, beta, 'white', depth - 1)  # recursive call
                 current_position.unmake_move(move)
 
-                min_eval = min(min_eval, returned_eval)
+                if returned_eval < min_eval:
+                    min_eval = returned_eval
+                    best_move = move
+
                 beta = min(beta, returned_eval)
 
                 if beta <= alpha:   # beta cut-off, update killer and history tables, break
@@ -181,5 +244,21 @@ class Search:
                         dest = move.destination_index
                         history_table[pc_type_index][dest] += depth * depth
                     break
+            
+            # after search completion, update transposition table
+            if min_eval <= alpha:               # alpha cut-off occurred, true score is at most min_eval
+                flag = 'UPPERBOUND'
+            elif min_eval >= original_beta:     # search failed low, couldn't improve on original beta
+                flag = 'LOWERBOUND'
+            else:                               # search was completed within alpha-beta window, score is exact
+                flag = 'EXACT'
+
+            # create new entry / update existing entry in transposition table
+            transposition_table[position_hash] = {
+                'eval': min_eval,
+                'depth': depth,
+                'flag': flag,
+                'best_move': best_move
+            }
             
             return min_eval
