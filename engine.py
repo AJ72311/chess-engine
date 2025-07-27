@@ -17,7 +17,7 @@ HISTORY_OUTER_INDICES = {
 
 # the Search class contains minimax's wrapper function find_best_move(), this is the algorithm for exploring the game tree
 class Search:
-    def __init__(self, depth=6):    # initialize depth, move-ordering heuristics
+    def __init__(self, depth=5):    # initialize depth, move-ordering heuristics
         self.depth = depth
 
         # KILLER TABLE: at each depth, store 'killer' moves: extremely strong quiet moves in sibling node
@@ -41,7 +41,7 @@ class Search:
         elif move.piece_captured:                           # 2nd priority: captures, MVV-LVA
             victim_value = PIECE_VALUES[move.piece_captured.lower()]
             attacker_value = PIECE_VALUES[move.moving_piece.lower()]
-            return 1000 + victim_value - attacker_value
+            return 1000 + (victim_value * 10) - attacker_value
         
         elif move in self.killer_table[depth]:              # 3rd priority: quiet 'killer' moves
             return 900
@@ -52,7 +52,7 @@ class Search:
             return self.history_table[pc_type_index][move.destination_index]    
 
     # wrapper function for minimax, returns the move with the most favorable evaluation for the provided color_to_play
-    def find_best_move(self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, depth = 6):    
+    def find_best_move(self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, depth = 5):    
         # SET UP INITIAL MINIMAX CALL
         legal_moves = generate_moves(root_node)[0] # all legal moves
         best_move = None
@@ -114,7 +114,7 @@ class Search:
                         dest = move.destination_index
                         history_table[pc_type_index][dest] += depth * depth
                     break
-
+        
         return best_move
 
     # recursive game search, minimax + alpha-beta pruning, intial call by find_best_move is below
@@ -138,7 +138,7 @@ class Search:
                 return 0                    # stalemate eval
             
         if depth == 0:                      # if depth == 0, base case #3: max depth reached
-            return evaluate_position(current_position)
+            return self.quiescence_search(current_position, alpha, beta, color_to_play) # enter quiescence routine
         
         # RECURSIVE CASE: 
         original_alpha = alpha
@@ -262,3 +262,74 @@ class Search:
             }
             
             return min_eval
+
+    # extends search at minimax leaf nodes to mitigate the 'horizon effect', only considers captures / check escapes
+    # hard coded depth limit of 8 to lockdown any runaway recursions
+    def quiescence_search(self, current_position, alpha, beta, color_to_play, depth=8):
+        # STEP 1: BASE CASES & MOVE GENERATION
+        legal_moves, check_count = generate_moves(current_position)
+
+        # first base case: stalemates / checkmates, return eval if found
+        if len(legal_moves) == 0:           # if no legal moves
+            if check_count > 0:             # if king is in check, it's checkmate
+                if current_position.color_to_play == 'white':
+                    return -99999 - depth   # white is checkmated, favorable eval for black 
+                elif current_position.color_to_play == 'black':
+                    return 99999 + depth    # black is checkmated, favorable eval for white
+                
+            elif check_count == 0:          # if no checks, it's stalemate
+                return 0                    # stalemate eval
+        
+        # only filter out non-captures if no checks... if a king is in check, we must evaluate all legal moves
+        if check_count == 0:
+            legal_moves = [move for move in legal_moves if move.piece_captured]
+
+        # second base case: hardcoded depth limit reached
+        if depth == 0: 
+            return evaluate_position(current_position)
+
+        # STEP 2: "STAND-PAT" PRUNING
+        stand_pat_eval = evaluate_position(current_position)
+        if color_to_play == 'white':            # white to move
+            if stand_pat_eval >= beta:          # fail high, black has a better option
+                return beta
+            alpha = max(alpha, stand_pat_eval)  # update alpha if the stand pat eval improves on it
+        elif color_to_play == 'black':          # black to move
+            if stand_pat_eval <= alpha:         # fail low, white has a better option
+                return alpha 
+            beta = min(beta, stand_pat_eval)    # update beta if the stand pat eval improves on it
+            
+        # third base case: no captures / check evasion moves available
+        if len(legal_moves) == 0:
+            return stand_pat_eval
+
+        # STEP 3: RECURSIVE CASE - SAME AS MINIMAX SEARCH, BUT SCOPE LIMITED TO CAPTURES / CHECK-EVASION ONLY
+        # move-ordering - sort captures using MVV-LVA
+        legal_moves.sort(key=lambda move: self.score_move(move, 0), reverse=True)
+
+        if color_to_play == 'white':
+            for move in legal_moves:
+                current_position.make_move(move)
+                returned_eval = self.quiescence_search(current_position, alpha, beta, 'black', depth-1)
+                current_position.unmake_move(move)
+
+                alpha = max(alpha, returned_eval)
+
+                if alpha >= beta:
+                    return beta
+                
+            return alpha
+
+        elif color_to_play == 'black':
+            for move in legal_moves:
+                current_position.make_move(move)
+                returned_eval = self.quiescence_search(current_position, alpha, beta, 'white', depth-1)
+                current_position.unmake_move(move)
+
+                beta = min(beta, returned_eval)
+
+                if beta <= alpha:
+                    return alpha
+                
+            return beta
+    
