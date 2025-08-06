@@ -1,9 +1,11 @@
 from board import Board, Move
 from evaluation import evaluate_position
 from move_generator import generate_moves
+import time
 
 # ----------------------------------- GLOBAL CONSTANTS -----------------------------------
 INFINITY = float('inf') # infinity constant
+MAX_DEPTH = 64 # used to initialize killer table
 
 # used in MVV-LVA move-ordering, king value as highest b/c we want king captures to be attempted last
 PIECE_VALUES = {'k': 10, 'q': 9, 'r': 5, 'b': 3.3, 'n': 3.2, 'p': 1}   
@@ -15,14 +17,19 @@ HISTORY_OUTER_INDICES = {
     'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11,
 }
 
-# the Search class contains minimax's wrapper function find_best_move(), this is the algorithm for exploring the game tree
+# the Search class contains minimax's wrapper function search_root(), this is the algorithm for exploring the game tree
 class Search:
-    def __init__(self, depth=5):    # initialize depth, move-ordering heuristics
+    class TimeUpError(Exception):
+        # Exception raised when the time limit for a search is exceeded
+        pass
+
+    def __init__(self, depth=64):    # initialize max possible depth, move-ordering heuristics
         self.depth = depth
+        self.max_q_depth = 0         # track maximum depth reached in quiescence search
 
         # KILLER TABLE: at each depth, store 'killer' moves: extremely strong quiet moves in sibling node
         # stores a maximum of two killer Move objects for each depth
-        self.killer_table = [[None, None] for _ in range(depth + 1)]
+        self.killer_table = [[None, None] for _ in range(MAX_DEPTH + 1)]
 
         # HISTORY TABLE: stores moves that caused beta cutoffs for use in move-ordering, bonus given for higher depths
         # for each piece type, store a score for all possible destination squares, update when a move creates a beta cutoff
@@ -51,10 +58,57 @@ class Search:
             pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
             return self.history_table[pc_type_index][move.destination_index]    
 
+    # iterative deepening wrapper for search_root
+    def find_best_move(self, root_node, color_to_play, time_limit=5):
+        # make a copy of the board to search on, this prevents time cutoffs from corrupting the original board
+        search_board = root_node.copy()
+        start_time = time.time()
+        final_best_move = None
+
+        # use a try/catch block to catch TimeUp errors
+        try:
+            # iterative deepening loop, increments search depth until reaching max depth or time limit
+            for depth in range(1, self.depth + 1):
+                self.max_q_depth = 0    # reset max quiescence depth at each iteration
+
+                # check time limit before initiating a new root search
+                if (time.time() - start_time) > time_limit:
+                    print(f'Time limit reached before depth {depth}, using last best move')
+                    break
+
+                # search the best move at the loop's current depth
+                best_move_this_depth = self.search_root(
+                    search_board, 
+                    color_to_play, 
+                    -INFINITY, 
+                    INFINITY, 
+                    depth,
+                    time_limit,
+                    start_time,
+                    final_best_move # the best move from the last depth, used in root-level move-ordering
+                )
+
+                if best_move_this_depth is not None:
+                    final_best_move = best_move_this_depth  # update overall best move to current depth's best move
+                    time_elapsed = time.time() - start_time
+                    print(f'Depth {depth + self.max_q_depth} completed in {time_elapsed:.2f}s')
+                else:
+                    # if search was inconclusive, stop and use previous depth's best move
+                    print(f"Search at depth {depth} was inconclusive. Using best move from depth {depth - 1}")
+                    break
+            
+        except self.TimeUpError:
+            print('Time limit reached. Using best move from the last completed depth')
+
+        return final_best_move  # after iterative deepening move ends, return the final best move
+
     # wrapper function for minimax, returns the move with the most favorable evaluation for the provided color_to_play
-    def find_best_move(self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, depth = 5):    
+    def search_root(
+            self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
+            depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
+        ):    
         # SET UP INITIAL MINIMAX CALL
-        legal_moves = generate_moves(root_node)[0] # all legal moves
+        legal_moves, _ = generate_moves(root_node) # all legal moves
         best_move = None
         killer_table = self.killer_table
         history_table = self.history_table
@@ -64,6 +118,11 @@ class Search:
         # note: hash moves are not used at the root
         legal_moves.sort(key=lambda move: self.score_move(move, depth), reverse=True)
 
+        # best move from last iterative-deepening depth always gets top priority
+        if best_move_last_depth in legal_moves:
+            legal_moves.remove(best_move_last_depth)
+            legal_moves.insert(0, best_move_last_depth) # re-insert at the start of the move list
+
         # SET-UP MINIMAX RECURSION
         # white to move
         if color_to_play == 'white':
@@ -71,7 +130,7 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                move_eval = self.minimax(root_node, alpha, beta, 'black', depth - 1)
+                move_eval = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time)
                 root_node.unmake_move(move)
                 if (move_eval > best_eval):
                     best_eval = move_eval
@@ -96,7 +155,7 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                move_eval = self.minimax(root_node, alpha, beta, 'white', depth - 1)
+                move_eval = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time)
                 root_node.unmake_move(move)
                 if (move_eval < best_eval):
                     best_eval = move_eval
@@ -117,8 +176,12 @@ class Search:
         
         return best_move
 
-    # recursive game search, minimax + alpha-beta pruning, intial call by find_best_move is below
-    def minimax(self, current_position, alpha, beta, color_to_play, depth):
+    # recursive game search, minimax + alpha-beta pruning, intial call by search_root is below
+    def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time):
+        # check if time limit exceeded before searching
+        if (time.time() - start_time) > time_limit:
+            raise self.TimeUpError()
+
         history_table = self.history_table
         killer_table = self.killer_table
         transposition_table = self.transposition_table
@@ -138,7 +201,8 @@ class Search:
                 return 0                    # stalemate eval
             
         if depth == 0:                      # if depth == 0, base case #3: max depth reached
-            return self.quiescence_search(current_position, alpha, beta, color_to_play) # enter quiescence routine
+            # enter quiescence routine
+            return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
         
         # RECURSIVE CASE: 
         original_alpha = alpha
@@ -179,7 +243,7 @@ class Search:
 
             for move in legal_moves:
                 current_position.make_move(move)
-                returned_eval = self.minimax(current_position, alpha, beta, 'black', depth - 1)  # recursive call
+                returned_eval = self.minimax(current_position, alpha, beta, 'black', depth - 1, time_limit, start_time)
                 current_position.unmake_move(move)
 
                 if returned_eval > max_eval:
@@ -224,7 +288,7 @@ class Search:
 
             for move in legal_moves:
                 current_position.make_move(move)
-                returned_eval = self.minimax(current_position, alpha, beta, 'white', depth - 1)  # recursive call
+                returned_eval = self.minimax(current_position, alpha, beta, 'white', depth - 1, time_limit, start_time)
                 current_position.unmake_move(move)
 
                 if returned_eval < min_eval:
@@ -265,7 +329,17 @@ class Search:
 
     # extends search at minimax leaf nodes to mitigate the 'horizon effect', only considers captures / check escapes
     # hard coded depth limit of 8 to lockdown any runaway recursions
-    def quiescence_search(self, current_position, alpha, beta, color_to_play, depth=8):
+    def quiescence_search(
+        self, current_position, alpha, beta, color_to_play, 
+        time_limit, start_time, q_depth=1, max_depth=8
+    ):
+
+        self.max_q_depth = max(self.max_q_depth, q_depth)
+
+        # before searching, check if time limit exceeded
+        if (time.time() - start_time) > time_limit:
+            raise self.TimeUpError()
+
         # STEP 1: BASE CASES & MOVE GENERATION
         legal_moves, check_count = generate_moves(current_position)
 
@@ -273,9 +347,9 @@ class Search:
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, it's checkmate
                 if current_position.color_to_play == 'white':
-                    return -99999 - depth   # white is checkmated, favorable eval for black 
+                    return -99999 - q_depth   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 + depth    # black is checkmated, favorable eval for white
+                    return 99999 + q_depth    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, it's stalemate
                 return 0                    # stalemate eval
@@ -285,7 +359,7 @@ class Search:
             legal_moves = [move for move in legal_moves if move.piece_captured]
 
         # second base case: hardcoded depth limit reached
-        if depth == 0: 
+        if q_depth >= max_depth: 
             return evaluate_position(current_position)
 
         # STEP 2: "STAND-PAT" PRUNING
@@ -310,7 +384,10 @@ class Search:
         if color_to_play == 'white':
             for move in legal_moves:
                 current_position.make_move(move)
-                returned_eval = self.quiescence_search(current_position, alpha, beta, 'black', depth-1)
+                returned_eval = self.quiescence_search(
+                    current_position, alpha, beta, 'black', 
+                    time_limit, start_time, q_depth+1, max_depth
+                )
                 current_position.unmake_move(move)
 
                 alpha = max(alpha, returned_eval)
@@ -323,7 +400,10 @@ class Search:
         elif color_to_play == 'black':
             for move in legal_moves:
                 current_position.make_move(move)
-                returned_eval = self.quiescence_search(current_position, alpha, beta, 'white', depth-1)
+                returned_eval = self.quiescence_search(
+                    current_position, alpha, beta, 'white', 
+                    time_limit, start_time, q_depth+1, max_depth
+                )
                 current_position.unmake_move(move)
 
                 beta = min(beta, returned_eval)

@@ -1,4 +1,5 @@
 import random
+import copy
 
 # GLOBAL VARIABLES
 # used to convert the 120-length position.board index to a 64-square index for Zobrist hash calculations
@@ -421,6 +422,27 @@ class Board:
     
     def fifty_move_criteria_met(self):      # checks if criteria for fifty move rule have been met
         return self.half_move == 100
+
+    # used to make a copy of the board to make/unmake moves on during search
+    def copy(self):
+        new_board = Board()
+
+        # Copy all attributes
+        new_board.board = self.board[:]
+        new_board.color_to_play = self.color_to_play
+        new_board.white_castle_kingside = self.white_castle_kingside
+        new_board.white_castle_queenside = self.white_castle_queenside
+        new_board.black_castle_kingside = self.black_castle_kingside
+        new_board.black_castle_queenside = self.black_castle_queenside
+        new_board.half_move = self.half_move
+        new_board.ply = self.ply
+        new_board.en_passant_square = self.en_passant_square
+        new_board.zobrist_hash = self.zobrist_hash
+        
+        # Deepcopy the piece_lists dictionary
+        new_board.piece_lists = copy.deepcopy(self.piece_lists)
+        
+        return new_board
     
 # acts as a "time capsule", capturing a game state snapshot for complete move execution and reversal
 # used by generate_moves() during move validation and minimax() during game tree search

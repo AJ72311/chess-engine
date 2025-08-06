@@ -77,9 +77,9 @@ def parse_user_move(input_str, legal_moves):
     return None
 
 # MAIN GAME LOOP
-def play_game(human_color='white'):
+def play_game(human_color='white', max_think_time=6):
     board = Board()
-    search = Search()
+    search = Search(depth=64)
     engine_color = 'black' if human_color == 'white' else 'white'
 
     while True:
@@ -114,9 +114,9 @@ def play_game(human_color='white'):
         # engine's turn
         else:
             print(f'Engine ({engine_color}) is thinking...')
-            start_time = time.time()                            # log time for performance testing
-            engine_move = search.find_best_move(board, engine_color)   # find the best move
-            end_time = time.time()                              # log end time
+            start_time = time.time()  # log time for performance testing
+            engine_move = search.find_best_move(board, engine_color, max_think_time)  # find the best move
+            end_time = time.time()    # log end time
 
             print(f'Engine found move in {end_time - start_time:.2f} seconds.')
 
@@ -124,12 +124,13 @@ def play_game(human_color='white'):
                 print(f'Engine move: {move_to_algebraic(engine_move)}')
                 board.make_move(engine_move)
             else:   # if for some reason engine couldn't find a move, print error message
-                print('Engine found no move, but game is not over? This is a bug.')
+                print('Engine found no move, but game is not over... This is a bug.')
                 break
 
 if __name__ == '__main__':
     # CONFIGURE SETTINGS
     HUMAN_PLAYER_COLOR = 'white'       # change to 'black' to play as black
+    ENGINE_THINKING_TIME = 6           # iterative deepening time limit (in seconds)
 
     # START GAME
-    play_game(HUMAN_PLAYER_COLOR)
+    play_game(HUMAN_PLAYER_COLOR, ENGINE_THINKING_TIME)

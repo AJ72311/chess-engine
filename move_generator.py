@@ -148,16 +148,18 @@ def generate_moves(position):
                     if is_check:                                              # first round of filtering: checks
                         if piece != friendly_king:                            # if this is not a king
                             if not check['is_sliding']:                       # non-sliding checks must be captured
-                                if destination != check['checker_index']:     # if move doesn't capture checker
-                                    continue                                  # invalid move
+                                if destination != check['checker_index']:
+                                    # must allow an en passant that captures an enemy pawn delivering a check     
+                                    if not (destination == position.en_passant_square and piece == friendly_pawn):
+                                        continue # invalid move
                             else:                                             # sliding checks may be blocked or captured
                                 if destination not in check['check_path']:    # if move doesn't block check
                                     if destination != check['checker_index']: # if move doesn't capture checker
-                                        continue                              # invalid move
+                                        continue # invalid move
 
                     if piece == friendly_king:                                # second round of filtering: king moves
                         if destination in threat_map:                         # if square is attacked by enemy piece
-                            continue                                          # invalid move
+                            continue # invalid move
                     
                     is_pinned = False                                         # third round of filtering: pins
                     pin_info = None                                           # pin_info is a dict containing pin details
@@ -170,12 +172,17 @@ def generate_moves(position):
                     if is_pinned:
                             if not (destination in pin_info['pin_path']):     # if the move leaves the pin's axis
                                 if destination != pin_info['pinner_index']:   # if the move doesn't capture the pinner
-                                    continue                                  # invalid move
+                                    continue # invalid move
 
-                    if board[destination] in friendly_pieces:                 # fourth round of filtering: friendly pieces
+                    # fourth round of filtering: a rare en passant capture clearing 2 pawns simultaneously to reveal a check
+                    if piece == friendly_pawn and destination == position.en_passant_square:
+                        if is_en_passant_pinned(position, index, position.en_passant_square):
+                            continue # if the capture is possible, invalid move
+
+                    if board[destination] in friendly_pieces:                 # fifth round of filtering: friendly pieces
                         continue                                              # can't land on square occupied by friend
 
-                    # if all four rounds of filtering passed, the move is legal
+                    # if all five rounds of filtering passed, the move is legal
                     if piece != friendly_pawn:                            # if this is not a pawn
                         # define arguments for legal Move object creation
                         moving_piece = piece
@@ -506,6 +513,40 @@ def get_checks_and_pins(position, source_index):
             })
 
     return checks, pins
+
+# manually checks for a rare edge case: 2 pawns blocking a horizontal pin both get cleared simultaneously by an en passant
+# get_checks_and_pins does not detect this, it only checks for a single piece in a pinned path
+def is_en_passant_pinned(position, source, ep_square):
+    board = position.board
+    color_to_play = position.color_to_play
+    king_index = position.piece_lists['K' if color_to_play == 'white' else 'k'][0]
+
+    # check if the king is on the same rank as the capturing pawn
+    if king_index // 10 != source // 10:
+        return False
+
+    enemy_rook = 'r' if color_to_play == 'white' else 'R'
+    enemy_queen = 'q' if color_to_play == 'white' else 'Q'
+    captured_pawn_source = ep_square + (10 if color_to_play == 'white' else -10) # the pawn that would get taken en passant
+
+    # cast rays horizontally from the king
+    for direction in [-1, 1]:
+        for i in range(1, 8):
+            current_index = king_index + (direction * i)
+
+            # ignore the squares of the two side-by-side pawns, continue casting ray
+            if current_index == source or current_index == captured_pawn_source:
+                continue
+
+            encountered_square = board[current_index]
+            if encountered_square == enemy_rook or encountered_square == enemy_queen:
+                return True  # pin detected
+
+            # if square is out of bounds or occupied by something other than enemy queen / rook
+            if encountered_square != EMPTY or encountered_square == OUT_OF_BOUNDS:
+                break   # move onto next direction
+    
+    return False    # if we never returned True inside the loop, there is no en passant pin
 
 # generate pseudo-legal target squares for non-sliding pieces, returns an array of all non-out-of-bounds squares
 def non_sliding_moves(position, source_index, deltas):   # used by kings and knights
