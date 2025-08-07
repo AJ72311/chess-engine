@@ -1,5 +1,6 @@
 from board import Board, Move
 from board import TO_64  # used to convert the 120-length position.board index to a 64-square index for PSTs
+from move_generator import QUEEN_DELTAS, ROOK_DELTAS, BISHOP_DELTAS, KNIGHT_DELTAS, OUT_OF_BOUNDS, EMPTY
 
 # DATA STRUCTURES
 # a lookup table to find the vertically mirrored square index-based
@@ -175,6 +176,10 @@ def evaluate_position(position):
     w_eg_eval = 0 
     b_mg_eval = 0 
     b_eg_eval = 0
+
+    # used to modify final evaluation based on piece activity
+    w_mobility = 0
+    b_mobility = 0
     
     # update mid-game/end-game material evaluations + PST scores for each piece, increment game_phase
     # King = 20000, Q = 900, R = 500, B = 330, N = 320, P = 100
@@ -187,18 +192,63 @@ def evaluate_position(position):
             elif piece == 'Q':
                 w_mg_eval += 900 + MG_QUEEN_PST[index_64]
                 w_eg_eval += 900 + EG_QUEEN_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for direction in QUEEN_DELTAS:
+                    for delta in QUEEN_DELTAS[direction]:
+                        target_index = index + delta
+                        target_square = position.board[target_index]
+                        
+                        if target_square == EMPTY:
+                            w_mobility += 1
+                        else:
+                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+
                 game_phase += 4
             elif piece == 'R':
                 w_mg_eval += 500 + MG_ROOK_PST[index_64]
                 w_eg_eval += 500 + EG_ROOK_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for direction in ROOK_DELTAS:
+                    for delta in ROOK_DELTAS[direction]:
+                        target_index = index + delta
+                        target_square = position.board[target_index]
+                        
+                        if target_square == EMPTY:
+                            w_mobility += 1
+                        else:
+                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+
                 game_phase += 2
             elif piece == 'B':
                 w_mg_eval += 330 + MG_BISHOP_PST[index_64]
                 w_eg_eval += 330 + EG_BISHOP_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for direction in BISHOP_DELTAS:
+                    for delta in BISHOP_DELTAS[direction]:
+                        target_index = index + delta
+                        target_square = position.board[target_index]
+                        
+                        if target_square == EMPTY:
+                            w_mobility += 1
+                        else:
+                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+
                 game_phase += 1
             elif piece == 'N':
                 w_mg_eval += 320 + MG_KNIGHT_PST[index_64]
                 w_eg_eval += 320 + EG_KNIGHT_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for delta in KNIGHT_DELTAS:
+                    target_index = index + delta
+                    target_square = position.board[target_index]
+
+                    if target_square == EMPTY:
+                            w_mobility += 1
+
                 game_phase += 1
             elif piece == 'P':
                 w_mg_eval += 100 + MG_PAWN_PST[index_64]
@@ -214,18 +264,63 @@ def evaluate_position(position):
             elif piece == 'q':
                 b_mg_eval += 900 + MG_QUEEN_PST[index_64]
                 b_eg_eval += 900 + EG_QUEEN_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for direction in QUEEN_DELTAS:
+                    for delta in QUEEN_DELTAS[direction]:
+                        target_index = index + delta
+                        target_square = position.board[target_index]
+                        
+                        if target_square == EMPTY:
+                            b_mobility += 1
+                        else:
+                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+
                 game_phase += 4
             elif piece == 'r':
                 b_mg_eval += 500 + MG_ROOK_PST[index_64]
                 b_eg_eval += 500 + EG_ROOK_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for direction in ROOK_DELTAS:
+                    for delta in ROOK_DELTAS[direction]:
+                        target_index = index + delta
+                        target_square = position.board[target_index]
+                        
+                        if target_square == EMPTY:
+                            b_mobility += 1
+                        else:
+                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+
                 game_phase += 2
             elif piece == 'b':
                 b_mg_eval += 330 + MG_BISHOP_PST[index_64]
                 b_eg_eval += 330 + EG_BISHOP_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for direction in BISHOP_DELTAS:
+                    for delta in BISHOP_DELTAS[direction]:
+                        target_index = index + delta
+                        target_square = position.board[target_index]
+                        
+                        if target_square == EMPTY:
+                            b_mobility += 1
+                        else:
+                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+
                 game_phase += 1
             elif piece == 'n':
                 b_mg_eval += 320 + MG_KNIGHT_PST[index_64]
                 b_eg_eval += 320 + EG_KNIGHT_PST[index_64]
+
+                # update piece mobility score with all accessible empty squares
+                for delta in KNIGHT_DELTAS:
+                    target_index = index + delta
+                    target_square = position.board[target_index]
+
+                    if target_square == EMPTY:
+                            b_mobility += 1
+
                 game_phase += 1
             elif piece == 'p':
                 b_mg_eval += 100 + MG_PAWN_PST[index_64]
@@ -235,5 +330,8 @@ def evaluate_position(position):
     game_phase = min(game_phase, max_phase)     # cap game_phase at 24 (in case of early promotions)
     w_interp_eval = (w_mg_eval * (game_phase / max_phase)) + (w_eg_eval * (1 - (game_phase / max_phase)))
     b_interp_eval = (b_mg_eval * (game_phase / max_phase)) + (b_eg_eval * (1 - (game_phase / max_phase)))
+
+    # scale mobility adjustment by a factor of 2
+    mobility_adjustment = 2 * (w_mobility - b_mobility)
     
-    return w_interp_eval - b_interp_eval    # final eval: + for white, - for black
+    return (w_interp_eval - b_interp_eval) + mobility_adjustment # final eval: + for white, - for black

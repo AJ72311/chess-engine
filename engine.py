@@ -91,7 +91,7 @@ class Search:
                 if best_move_this_depth is not None:
                     final_best_move = best_move_this_depth  # update overall best move to current depth's best move
                     time_elapsed = time.time() - start_time
-                    print(f'Depth {depth + self.max_q_depth} completed in {time_elapsed:.2f}s')
+                    print(f'Depth {depth} completed in {time_elapsed:.2f}s')
                 else:
                     # if search was inconclusive, stop and use previous depth's best move
                     print(f"Search at depth {depth} was inconclusive. Using best move from depth {depth - 1}")
