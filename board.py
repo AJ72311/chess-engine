@@ -444,7 +444,7 @@ class Board:
     # a repetition is classified as a position at least once since the last irreversible (pawn or capture) move
     def is_repetition(self):
         # relevant history starts from the ply of the last irreversible move
-        lookback_start_index = self.ply - self.half_move
+        lookback_start_index = max(0, self.ply - self.half_move)
 
         # search the relevant game history for a matching Zobrist key
         for i in range(lookback_start_index, self.ply):

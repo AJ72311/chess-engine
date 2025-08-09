@@ -116,16 +116,22 @@ def set_board_from_fen(board, fen_string):
     board.en_passant_square = ALGEBRAIC_TO_INDEX.get(ep_square, None)
 
     board.half_move = int(parts[4])
-    board.ply = (int(parts[5]) - 1) * 2
-    if board.color_to_play == 'black':
-        board.ply += 1
+    board.ply = 0 # must start at 0 to prevent index errors when checking for repetitions
+    
+    # board.ply = (int(parts[5]) - 1) * 2
+    # if board.color_to_play == 'black':
+    #     board.ply += 1
 
-    # 1. Clear the old piece lists from the starting position
+    # clear the old piece lists from the starting position
     for piece in board.piece_lists:
         board.piece_lists[piece].clear()
     
-    # 2. Re-populate the piece lists based on the new board state
+    # re-populate the piece lists based on the new board state
     board.initialize_piece_lists()
+
+    # recalculate the hash for the new position and reset the history table
+    board.zobrist_hash = board.compute_hash()
+    board.history = [board.zobrist_hash]
 
 # parses the user's input (eg. e2e4) and finds the corresponding legal Move object
 # returns the Move object if found, otherwise None

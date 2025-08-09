@@ -67,7 +67,9 @@ class Search:
 
     # iterative deepening wrapper for search_root
     def find_best_move(self, root_node, color_to_play, time_limit=5):
-        # check opening book before searching, only withiin first 20 ply
+        book_move_uci = None
+
+        # check opening book before searching, only within first 20 ply
         if root_node.ply < 20:
             book_move_uci = get_book_move(root_node)
 
