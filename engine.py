@@ -1,7 +1,14 @@
+# for search
 from board import Board, Move
 from evaluation import evaluate_position
 from move_generator import generate_moves
 import time
+
+# for opening book
+import chess
+import chess.polyglot
+from utils import board_to_fen, ALGEBRAIC_TO_INDEX
+from utils import parse_user_move
 
 # ----------------------------------- GLOBAL CONSTANTS -----------------------------------
 INFINITY = float('inf') # infinity constant
@@ -60,6 +67,21 @@ class Search:
 
     # iterative deepening wrapper for search_root
     def find_best_move(self, root_node, color_to_play, time_limit=5):
+        # check opening book before searching, only withiin first 20 ply
+        if root_node.ply < 20:
+            book_move_uci = get_book_move(root_node)
+
+        if book_move_uci: # if opening book contains a move for this position
+            legal_moves, _ = generate_moves(root_node) # get legal moves to find the book move's corresponding move object
+            move_to_play = parse_user_move(book_move_uci, legal_moves) # get move object and convert to algebraic uci format
+
+            if move_to_play:
+                return move_to_play
+            else:
+                # safety check in case book is corrupted
+                print('Warning: book move was illegal, proceeding with search')
+        
+        # if no book move found, proceed with normal search
         # make a copy of the board to search on, this prevents time cutoffs from corrupting the original board
         search_board = root_node.copy()
         start_time = time.time()
@@ -420,4 +442,24 @@ class Search:
                     return alpha
                 
             return beta
-    
+
+# helper function, retreives a move from the opening book if available
+# returns the book move in UCI format if found, otherwise None
+def get_book_move(position, book_path='book.bin'):
+    try:
+        with chess.polyglot.open_reader(book_path) as reader:
+            fen = board_to_fen(position) # convert the board representation to fen format
+            board = chess.Board(fen)     # create a python-chess board using the fen
+
+            # find the best weighted move for the position
+            entry = reader.find(board)
+            book_move = entry.move
+
+            # return the book move in uci format (e.g. e2e4)
+            print(f'Book move found: {book_move.uci()}')
+            return book_move.uci()
+
+    except (FileNotFoundError):
+        print(f'Error: opening book file not found at {book_path}')
+    except (IndexError):
+        return None # an IndexError means the position was not found in the book

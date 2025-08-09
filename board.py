@@ -2,21 +2,7 @@ import random
 import copy
 
 # GLOBAL VARIABLES
-# used to convert the 120-length position.board index to a 64-square index for Zobrist hash calculations
-TO_64 = [
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1,  0,  1,  2,  3,  4,  5,  6,  7, -1,
-    -1,  8,  9, 10, 11, 12, 13, 14, 15, -1,
-    -1, 16, 17, 18, 19, 20, 21, 22, 23, -1,
-    -1, 24, 25, 26, 27, 28, 29, 30, 31, -1,
-    -1, 32, 33, 34, 35, 36, 37, 38, 39, -1,
-    -1, 40, 41, 42, 43, 44, 45, 46, 47, -1,
-    -1, 48, 49, 50, 51, 52, 53, 54, 55, -1,
-    -1, 56, 57, 58, 59, 60, 61, 62, 63, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
-]
+from utils import TO_64
 
 PIECE_CODES = {         # used to map each piece to an array index in zorbist table for pieces
     'P': 0, 'N': 1, 'B': 2, 'R': 3, 'Q': 4, 'K': 5, 

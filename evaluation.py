@@ -1,5 +1,5 @@
 from board import Board, Move
-from board import TO_64  # used to convert the 120-length position.board index to a 64-square index for PSTs
+from utils import TO_64  # used to convert the 120-length position.board index to a 64-square index for PSTs
 from move_generator import KING_DELTAS, QUEEN_DELTAS, ROOK_DELTAS, BISHOP_DELTAS, KNIGHT_DELTAS, OUT_OF_BOUNDS, EMPTY
 
 # DATA STRUCTURES
@@ -314,9 +314,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    w_mg_eval += 10
+                    w_mg_eval += 20
                 elif index in OUTER_CENTER:
-                    w_mg_eval += 5
+                    w_mg_eval += 10
 
                 # add penalty for undeveloped knights
                 if index in KNIGHT_HOME_SQUARES:
@@ -342,9 +342,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    w_mg_eval += 40
-                elif index in OUTER_CENTER:
                     w_mg_eval += 25
+                elif index in OUTER_CENTER:
+                    w_mg_eval += 15
                     
     for piece in BLACK_PIECES:
         for index in piece_lists[piece]:
@@ -437,9 +437,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    b_mg_eval += 10
+                    b_mg_eval += 20
                 elif index in OUTER_CENTER:
-                    b_mg_eval += 5
+                    b_mg_eval += 10
 
                 # add penalty for undeveloped knights
                 if index in KNIGHT_HOME_SQUARES:
@@ -465,9 +465,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    b_mg_eval += 40
-                elif index in OUTER_CENTER:
                     b_mg_eval += 25
+                elif index in OUTER_CENTER:
+                    b_mg_eval += 15
 
     # give a penalty to castled kings that are not protected by a "pawn shield"
     for king_color in ['K', 'k']: # uppercase K = white king, lowercase k = black king

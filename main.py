@@ -5,17 +5,7 @@ import time
 
 # HELPER FUNCTIONS FOR THE GAME LOOP
 # a mapping from 10x12 indices to standard algebraic notation.
-INDEX_TO_ALGEBRAIC = {
-    21: 'a8', 22: 'b8', 23: 'c8', 24: 'd8', 25: 'e8', 26: 'f8', 27: 'g8', 28: 'h8',
-    31: 'a7', 32: 'b7', 33: 'c7', 34: 'd7', 35: 'e7', 36: 'f7', 37: 'g7', 38: 'h7',
-    41: 'a6', 42: 'b6', 43: 'c6', 44: 'd6', 45: 'e6', 46: 'f6', 47: 'g6', 48: 'h6',
-    51: 'a5', 52: 'b5', 53: 'c5', 54: 'd5', 55: 'e5', 56: 'f5', 57: 'g5', 58: 'h5',
-    61: 'a4', 62: 'b4', 63: 'c4', 64: 'd4', 65: 'e4', 66: 'f4', 67: 'g4', 68: 'h4',
-    71: 'a3', 72: 'b3', 73: 'c3', 74: 'd3', 75: 'e3', 76: 'f3', 77: 'g3', 78: 'h3',
-    81: 'a2', 82: 'b2', 83: 'c2', 84: 'd2', 85: 'e2', 86: 'f2', 87: 'g2', 88: 'h2',
-    91: 'a1', 92: 'b1', 93: 'c1', 94: 'd1', 95: 'e1', 96: 'f1', 97: 'g1', 98: 'h1',
-}
-ALGEBRAIC_TO_INDEX = {v: k for k, v in INDEX_TO_ALGEBRAIC.items()}
+from utils import INDEX_TO_ALGEBRAIC, ALGEBRAIC_TO_INDEX, parse_user_move, move_to_algebraic
 
 # prints the board to the console in a human-readable format
 def print_board(position):
@@ -39,42 +29,6 @@ def print_board(position):
     
     print("  +-----------------+")
     print("   a b c d e f g h\n")
-
-# converts a Move object to simplified algebraic notation for printing
-def move_to_algebraic(move):
-    source_sq = INDEX_TO_ALGEBRAIC.get(move.source_index, '??') 
-    dest_sq = INDEX_TO_ALGEBRAIC.get(move.destination_index, '??')
-    promo_char = move.promotion_piece.lower() if move.promotion_piece else ''   # for promotions only
-    return f"{source_sq}{dest_sq}{promo_char}"
-
-# parses the user's input (eg. e2e4) and finds the corresponding legal Move object
-# returns the Move object if found, otherwise None
-def parse_user_move(input_str, legal_moves):
-    if len(input_str) < 4:
-        return None
-    
-    source_str = input_str[0:2]
-    dest_str = input_str[2:4]
-    promo_char = input_str[4] if len(input_str) > 4 else None
-
-    source_index = ALGEBRAIC_TO_INDEX.get(source_str)
-    dest_index = ALGEBRAIC_TO_INDEX.get(dest_str)
-
-    if source_index is None or dest_index is None:
-        return None
-    
-    # find the matching legal move
-    for move in legal_moves:
-        if move.source_index == source_index and move.destination_index == dest_index:
-            # if promotion, ensure promotion piece matches
-            if move.promotion_piece:
-                if (promo_char) and (move.promotion_piece.lower() == promo_char):
-                    return move
-            else:
-                return move
-            
-    # if no legal move found
-    return None
 
 # MAIN GAME LOOP
 def play_game(human_color='white', max_think_time=6):
