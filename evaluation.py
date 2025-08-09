@@ -163,6 +163,18 @@ BLACK_PIECES = ['k', 'q', 'r', 'b', 'n', 'p']
 # penalty lookup table, index = total attack score on a king's surrounding area
 KING_ATTACK_PENALTIES = [0, 5, 15, 40, 70, 100, 150, 200, 250, 300]
 
+# define central squares to give boosts for pieces that control the center
+INNER_CENTER = {54, 55, 64, 65} # d4, e4, d5, e5
+OUTER_CENTER = {
+    43, 44, 45, 46, 
+    53, 56, 63, 66, 
+    73, 74, 75, 76 
+}
+
+# define home squares to give penalties to undeveloped minor pieces
+KNIGHT_HOME_SQUARES = {22, 27, 92, 97}
+BISHOP_HOME_SQUARES = {23, 26, 93, 96}
+
 # position is a Board object    
 def evaluate_position(position):
     piece_lists = position.piece_lists
@@ -197,6 +209,18 @@ def evaluate_position(position):
     # used to count attacks on the one-block radius surrounding the enemy kings
     w_king_ring = [w_king_index + delta for delta in KING_DELTAS]
     b_king_ring = [b_king_index + delta for delta in KING_DELTAS]
+
+    # --- BEGIN EVALUATION LOGIC BELOW ---
+
+    # add bonuses to sides that maintain the right to castle
+    if position.white_castle_kingside:
+        w_mg_eval += 15
+    if position.white_castle_queenside:
+        w_mg_eval += 15
+    if position.black_castle_kingside:
+        b_mg_eval += 15
+    if position.black_castle_queenside:
+        b_mg_eval += 15
     
     # update mid-game/end-game material evaluations + PST scores for each piece, increment game_phase
     # King = 20000, Q = 900, R = 500, B = 330, N = 320, P = 100
@@ -206,6 +230,11 @@ def evaluate_position(position):
             if piece == 'K':
                 w_mg_eval += 20000 + MG_KING_PST[index_64]
                 w_eg_eval += 20000 + EG_KING_PST[index_64]
+
+                # add a bonus when the king is on a castling square
+                if index == 97 or index == 93:
+                    w_mg_eval += 40
+
             elif piece == 'Q':
                 w_mg_eval += 900 + MG_QUEEN_PST[index_64]
                 w_eg_eval += 900 + EG_QUEEN_PST[index_64]
@@ -252,6 +281,16 @@ def evaluate_position(position):
                 w_mg_eval += 330 + MG_BISHOP_PST[index_64]
                 w_eg_eval += 330 + EG_BISHOP_PST[index_64]
 
+                # add bonus for central control
+                if index in INNER_CENTER:
+                    w_mg_eval += 10
+                elif index in OUTER_CENTER:
+                    w_mg_eval += 5
+
+                # add penalty for undeveloped bishops
+                if index in BISHOP_HOME_SQUARES:
+                    w_mg_eval -= 10
+
                 # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in BISHOP_DELTAS:
                     for delta in BISHOP_DELTAS[direction]:
@@ -273,6 +312,16 @@ def evaluate_position(position):
                 w_mg_eval += 320 + MG_KNIGHT_PST[index_64]
                 w_eg_eval += 320 + EG_KNIGHT_PST[index_64]
 
+                # add bonus for central control
+                if index in INNER_CENTER:
+                    w_mg_eval += 20
+                elif index in OUTER_CENTER:
+                    w_mg_eval += 10
+
+                # add penalty for undeveloped knights
+                if index in KNIGHT_HOME_SQUARES:
+                    w_mg_eval -= 10
+
                 # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for delta in KNIGHT_DELTAS:
                     target_index = index + delta
@@ -290,6 +339,12 @@ def evaluate_position(position):
             elif piece == 'P':
                 w_mg_eval += 100 + MG_PAWN_PST[index_64]
                 w_eg_eval += 100 + EG_PAWN_PST[index_64]
+
+                # add bonus for central control
+                if index in INNER_CENTER:
+                    w_mg_eval += 25
+                elif index in OUTER_CENTER:
+                    w_mg_eval += 15
                     
     for piece in BLACK_PIECES:
         for index in piece_lists[piece]:
@@ -298,6 +353,11 @@ def evaluate_position(position):
             if piece == 'k':
                 b_mg_eval += 20000 + MG_KING_PST[index_64]
                 b_eg_eval += 20000 + EG_KING_PST[index_64]
+
+                # add a bonus when the king is on a castling square
+                if index == 27 or index == 23:
+                    b_mg_eval += 40
+
             elif piece == 'q':
                 b_mg_eval += 900 + MG_QUEEN_PST[index_64]
                 b_eg_eval += 900 + EG_QUEEN_PST[index_64]
@@ -344,6 +404,16 @@ def evaluate_position(position):
                 b_mg_eval += 330 + MG_BISHOP_PST[index_64]
                 b_eg_eval += 330 + EG_BISHOP_PST[index_64]
 
+                # add bonus for central control
+                if index in INNER_CENTER:
+                    b_mg_eval += 10
+                elif index in OUTER_CENTER:
+                    b_mg_eval += 5
+
+                # add penalty for undeveloped bishops
+                if index in BISHOP_HOME_SQUARES:
+                    b_mg_eval -= 10
+
                 # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in BISHOP_DELTAS:
                     for delta in BISHOP_DELTAS[direction]:
@@ -365,6 +435,16 @@ def evaluate_position(position):
                 b_mg_eval += 320 + MG_KNIGHT_PST[index_64]
                 b_eg_eval += 320 + EG_KNIGHT_PST[index_64]
 
+                # add bonus for central control
+                if index in INNER_CENTER:
+                    b_mg_eval += 20
+                elif index in OUTER_CENTER:
+                    b_mg_eval += 10
+
+                # add penalty for undeveloped knights
+                if index in KNIGHT_HOME_SQUARES:
+                    b_mg_eval -= 10
+
                 # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for delta in KNIGHT_DELTAS:
                     target_index = index + delta
@@ -382,6 +462,12 @@ def evaluate_position(position):
             elif piece == 'p':
                 b_mg_eval += 100 + MG_PAWN_PST[index_64]
                 b_eg_eval += 100 + EG_PAWN_PST[index_64]
+
+                # add bonus for central control
+                if index in INNER_CENTER:
+                    b_mg_eval += 25
+                elif index in OUTER_CENTER:
+                    b_mg_eval += 15
 
     # give a penalty to castled kings that are not protected by a "pawn shield"
     for king_color in ['K', 'k']: # uppercase K = white king, lowercase k = black king
