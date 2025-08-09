@@ -1,6 +1,6 @@
 from board import Board, Move
 from board import TO_64  # used to convert the 120-length position.board index to a 64-square index for PSTs
-from move_generator import QUEEN_DELTAS, ROOK_DELTAS, BISHOP_DELTAS, KNIGHT_DELTAS, OUT_OF_BOUNDS, EMPTY
+from move_generator import KING_DELTAS, QUEEN_DELTAS, ROOK_DELTAS, BISHOP_DELTAS, KNIGHT_DELTAS, OUT_OF_BOUNDS, EMPTY
 
 # DATA STRUCTURES
 # a lookup table to find the vertically mirrored square index-based
@@ -160,11 +160,14 @@ EG_KING_PST = [
 WHITE_PIECES = ['K', 'Q', 'R', 'B', 'N', 'P']
 BLACK_PIECES = ['k', 'q', 'r', 'b', 'n', 'p']
 
+# penalty lookup table, index = total attack score on a king's surrounding area
+KING_ATTACK_PENALTIES = [0, 5, 15, 40, 70, 100, 150, 200, 250, 300]
+
 # position is a Board object    
 def evaluate_position(position):
     piece_lists = position.piece_lists
     
-    # used to calculate interpolated value btwn. end-game (0) & mid-game (1) for PSTs
+    # used to calculate interpolated value btwn. end-game (0) & mid-game (1) for PSTs & king safety adjustment
     # phase is determined with pre-defined phase scores for each piece left on the board:
     # Queen = 4, Rook = 2, Bishop = 1, Knight = 1, Maximum Total is 24
     # interpolation formula: (mg-count * (game-phase / max-phase)) + (eg-count * (1 - (game_phase / max-phase)))
@@ -177,9 +180,23 @@ def evaluate_position(position):
     b_mg_eval = 0 
     b_eg_eval = 0
 
-    # used to modify final evaluation based on piece activity
+    # used to adjust final evaluation based on piece activity
     w_mobility = 0
     b_mobility = 0
+
+    # used to adjust final evaluation based on king safety
+    w_king_safety_penalty = 0
+    b_king_safety_penalty = 0
+    w_king_index = piece_lists['K'][0]
+    b_king_index = piece_lists['k'][0]
+
+    # used to adjust final evaluation based on attacks against the area near the enemy king
+    w_king_attack_score = 0
+    b_king_attack_score = 0
+
+    # used to count attacks on the one-block radius surrounding the enemy kings
+    w_king_ring = [w_king_index + delta for delta in KING_DELTAS]
+    b_king_ring = [b_king_index + delta for delta in KING_DELTAS]
     
     # update mid-game/end-game material evaluations + PST scores for each piece, increment game_phase
     # King = 20000, Q = 900, R = 500, B = 330, N = 320, P = 100
@@ -193,61 +210,81 @@ def evaluate_position(position):
                 w_mg_eval += 900 + MG_QUEEN_PST[index_64]
                 w_eg_eval += 900 + EG_QUEEN_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in QUEEN_DELTAS:
                     for delta in QUEEN_DELTAS[direction]:
                         target_index = index + delta
                         target_square = position.board[target_index]
                         
+                        if target_square == OUT_OF_BOUNDS: break
+
+                        if target_square in b_king_ring:
+                            w_king_attack_score += 5 # queen attack bonus
+
                         if target_square == EMPTY:
                             w_mobility += 1
                         else:
-                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+                            break # move to next direction if a non-empty / out-of-bounds square is encountered
 
                 game_phase += 4
             elif piece == 'R':
                 w_mg_eval += 500 + MG_ROOK_PST[index_64]
                 w_eg_eval += 500 + EG_ROOK_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in ROOK_DELTAS:
                     for delta in ROOK_DELTAS[direction]:
                         target_index = index + delta
                         target_square = position.board[target_index]
                         
+                        if target_square == OUT_OF_BOUNDS: break
+
+                        if target_square in b_king_ring:
+                            w_king_attack_score += 4 # rook attack bonus
+
                         if target_square == EMPTY:
                             w_mobility += 1
                         else:
-                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+                            break # move to next direction if a non-empty / out-of-bounds square is encountered
 
                 game_phase += 2
             elif piece == 'B':
                 w_mg_eval += 330 + MG_BISHOP_PST[index_64]
                 w_eg_eval += 330 + EG_BISHOP_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in BISHOP_DELTAS:
                     for delta in BISHOP_DELTAS[direction]:
                         target_index = index + delta
                         target_square = position.board[target_index]
                         
+                        if target_square == OUT_OF_BOUNDS: break
+
+                        if target_square in b_king_ring:
+                            w_king_attack_score += 2 # bishop attack bonus
+
                         if target_square == EMPTY:
                             w_mobility += 1
                         else:
-                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+                            break # move to next direction if a non-empty / out-of-bounds square is encountered
 
                 game_phase += 1
             elif piece == 'N':
                 w_mg_eval += 320 + MG_KNIGHT_PST[index_64]
                 w_eg_eval += 320 + EG_KNIGHT_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for delta in KNIGHT_DELTAS:
                     target_index = index + delta
                     target_square = position.board[target_index]
+                    
+                    if target_square == OUT_OF_BOUNDS: continue
+
+                    if target_square in b_king_ring:
+                        w_king_attack_score += 2 # knight attack bonus
 
                     if target_square == EMPTY:
-                            w_mobility += 1
+                        w_mobility += 1
 
                 game_phase += 1
             elif piece == 'P':
@@ -265,73 +302,146 @@ def evaluate_position(position):
                 b_mg_eval += 900 + MG_QUEEN_PST[index_64]
                 b_eg_eval += 900 + EG_QUEEN_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in QUEEN_DELTAS:
                     for delta in QUEEN_DELTAS[direction]:
                         target_index = index + delta
                         target_square = position.board[target_index]
                         
+                        if target_square == OUT_OF_BOUNDS: break
+
+                        if target_square in w_king_ring:
+                            b_king_attack_score += 5 # queen attack bonus
+
                         if target_square == EMPTY:
                             b_mobility += 1
                         else:
-                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+                            break # move to next direction if a non-empty / out-of-bounds square is encountered
 
                 game_phase += 4
             elif piece == 'r':
                 b_mg_eval += 500 + MG_ROOK_PST[index_64]
                 b_eg_eval += 500 + EG_ROOK_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in ROOK_DELTAS:
                     for delta in ROOK_DELTAS[direction]:
                         target_index = index + delta
                         target_square = position.board[target_index]
                         
+                        if target_square == OUT_OF_BOUNDS: break
+
+                        if target_square in w_king_ring:
+                            b_king_attack_score += 4 # rook attack bonus
+
                         if target_square == EMPTY:
                             b_mobility += 1
                         else:
-                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+                            break # move to next direction if a non-empty / out-of-bounds square is encountered
 
                 game_phase += 2
             elif piece == 'b':
                 b_mg_eval += 330 + MG_BISHOP_PST[index_64]
                 b_eg_eval += 330 + EG_BISHOP_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for direction in BISHOP_DELTAS:
                     for delta in BISHOP_DELTAS[direction]:
                         target_index = index + delta
                         target_square = position.board[target_index]
                         
+                        if target_square == OUT_OF_BOUNDS: break
+
+                        if target_square in w_king_ring:
+                            b_king_attack_score += 2 # bishop attack bonus
+
                         if target_square == EMPTY:
                             b_mobility += 1
                         else:
-                            break # stop direction's loop once a non-empty / out-of-bounds square is encountered
+                            break # move to next direction if a non-empty / out-of-bounds square is encountered
 
                 game_phase += 1
             elif piece == 'n':
                 b_mg_eval += 320 + MG_KNIGHT_PST[index_64]
                 b_eg_eval += 320 + EG_KNIGHT_PST[index_64]
 
-                # update piece mobility score with all accessible empty squares
+                # update piece mobility score with all accessible empty squares + update attacks on enemy king area
                 for delta in KNIGHT_DELTAS:
                     target_index = index + delta
                     target_square = position.board[target_index]
+                    
+                    if target_square == OUT_OF_BOUNDS: continue
+
+                    if target_square in w_king_ring:
+                        b_king_attack_score += 2 # knight attack bonus
 
                     if target_square == EMPTY:
-                            b_mobility += 1
+                        b_mobility += 1
 
                 game_phase += 1
             elif piece == 'p':
                 b_mg_eval += 100 + MG_PAWN_PST[index_64]
                 b_eg_eval += 100 + EG_PAWN_PST[index_64]
+
+    # give a penalty to castled kings that are not protected by a "pawn shield"
+    for king_color in ['K', 'k']: # uppercase K = white king, lowercase k = black king
+        king_file = (w_king_index % 10) if (king_color == 'K') else (b_king_index % 10)
+        king_rank = (w_king_index // 10) if (king_color == 'K') else (b_king_index // 10)
+
+        # check pawn shield for white king only if it's on the 1st rank
+        if king_color == 'K' and king_rank == 9:
+            shield_files = [king_file - 1, king_file, king_file + 1]
+
+            # check the two squares directly in front of each of the king's shield files
+            for file in shield_files:
+                ideal_shield_square = 80 + file  # index 80 is the start of the second rank
+                ideal_square_occupier = position.board[ideal_shield_square]
+                pushed_shield_square = 70 + file # index 70 is the start of the third rank
+                pushed_square_occupier = position.board[pushed_shield_square]
+
+                # if no friendly pawn found in front of the king, apply a king safety penalty
+                if ideal_square_occupier != 'P':
+                    if pushed_square_occupier != 'P': 
+                        w_king_safety_penalty += 25  # if both 2nd and 3rd ranks have no pawn -> full penalty
+                    else:
+                        w_king_safety_penalty += 15  # if 2nd rank unprotected but 3rd has a pawn -> reduced penalty
+        
+        # check pawn shield for black king only if it's on the 8th rank
+        if king_color == 'k' and king_rank == 2:
+            shield_files = [king_file - 1, king_file, king_file + 1]
+
+            # check the two squares directly in front of each of the king's shield files
+            for file in shield_files:
+                ideal_shield_square = 30 + file  # index 30 is the start of the seventh rank
+                ideal_square_occupier = position.board[ideal_shield_square]
+                pushed_shield_square = 40 + file # index 40 is the start of the sixth rank
+                pushed_square_occupier = position.board[pushed_shield_square]
+
+                # if no friendly pawn found in front of the king, apply a king safety penalty
+                if ideal_square_occupier != 'p':
+                    if pushed_square_occupier != 'p':
+                        b_king_safety_penalty += 25  # if both 7th and 6th ranks have no pawn -> full penalty
+                    else:
+                        b_king_safety_penalty += 15  # if 7th rank unprotected but 6th has a pawn -> reduced penalty
     
     # find interpolated evaluations for white and black based on game phase
     game_phase = min(game_phase, max_phase)     # cap game_phase at 24 (in case of early promotions)
+
     w_interp_eval = (w_mg_eval * (game_phase / max_phase)) + (w_eg_eval * (1 - (game_phase / max_phase)))
     b_interp_eval = (b_mg_eval * (game_phase / max_phase)) + (b_eg_eval * (1 - (game_phase / max_phase)))
 
     # scale mobility adjustment by a factor of 2
     mobility_adjustment = 2 * (w_mobility - b_mobility)
+
+    # calculate final king safety adjustments
+    w_king_safety_penalty += KING_ATTACK_PENALTIES[min(b_king_attack_score, 9)]
+    b_king_safety_penalty += KING_ATTACK_PENALTIES[min(w_king_attack_score, 9)]
+
+    # taper penalties with game phase (king safety importance decreases with fewer pieces on the board)
+    w_tapered_king_penalty = w_king_safety_penalty * (game_phase / max_phase)
+    b_tapered_king_penalty = b_king_safety_penalty * (game_phase / max_phase)
     
-    return (w_interp_eval - b_interp_eval) + mobility_adjustment # final eval: + for white, - for black
+    king_safety_adjustment = b_tapered_king_penalty - w_tapered_king_penalty # higher penalty for black = good for white
+    
+    # final eval: + for white, - for black
+    return (w_interp_eval - b_interp_eval) + mobility_adjustment + king_safety_adjustment

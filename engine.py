@@ -347,9 +347,9 @@ class Search:
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, it's checkmate
                 if current_position.color_to_play == 'white':
-                    return -99999 - q_depth   # white is checkmated, favorable eval for black 
+                    return -99999 + q_depth   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 + q_depth    # black is checkmated, favorable eval for white
+                    return 99999 - q_depth    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, it's stalemate
                 return 0                    # stalemate eval
