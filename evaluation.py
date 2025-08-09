@@ -314,9 +314,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    w_mg_eval += 20
-                elif index in OUTER_CENTER:
                     w_mg_eval += 10
+                elif index in OUTER_CENTER:
+                    w_mg_eval += 5
 
                 # add penalty for undeveloped knights
                 if index in KNIGHT_HOME_SQUARES:
@@ -342,9 +342,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    w_mg_eval += 25
+                    w_mg_eval += 40
                 elif index in OUTER_CENTER:
-                    w_mg_eval += 15
+                    w_mg_eval += 25
                     
     for piece in BLACK_PIECES:
         for index in piece_lists[piece]:
@@ -437,9 +437,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    b_mg_eval += 20
-                elif index in OUTER_CENTER:
                     b_mg_eval += 10
+                elif index in OUTER_CENTER:
+                    b_mg_eval += 5
 
                 # add penalty for undeveloped knights
                 if index in KNIGHT_HOME_SQUARES:
@@ -465,9 +465,9 @@ def evaluate_position(position):
 
                 # add bonus for central control
                 if index in INNER_CENTER:
-                    b_mg_eval += 25
+                    b_mg_eval += 40
                 elif index in OUTER_CENTER:
-                    b_mg_eval += 15
+                    b_mg_eval += 25
 
     # give a penalty to castled kings that are not protected by a "pawn shield"
     for king_color in ['K', 'k']: # uppercase K = white king, lowercase k = black king
