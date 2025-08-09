@@ -182,6 +182,10 @@ class Search:
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
 
+        # BASE CASE 1: threefold repetitions
+        if current_position.is_repetition():
+            return 0 # draw score
+
         history_table = self.history_table
         killer_table = self.killer_table
         transposition_table = self.transposition_table
@@ -189,7 +193,7 @@ class Search:
         # generate all legal moves and count the number of checks in the position
         legal_moves, check_count = generate_moves(current_position) # all legal moves
 
-        # BASE CASE: checkmate, stalemate, or depth = 0
+        # BASE CASE 2: checkmate, stalemate, fifty move rule, or depth = 0
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, base case #1: it's checkmate
                 if current_position.color_to_play == 'white':
@@ -199,6 +203,10 @@ class Search:
                 
             elif check_count == 0:          # if no checks, base case #2: it's stalemate
                 return 0                    # stalemate eval
+        
+        # check for fifty move rule draws
+        if current_position.fifty_move_criteria_met():
+            return 0 # draw score
             
         if depth == 0:                      # if depth == 0, base case #3: max depth reached
             # enter quiescence routine

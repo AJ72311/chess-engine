@@ -74,6 +74,8 @@ class Board:
         
         self.initialize_piece_lists()            # initialize piece list indices
         self.zobrist_hash = self.compute_hash()  # a hash of the position, used in engine.py's transposition table
+
+        self.history = [self.zobrist_hash]       # initialize game history, detects 50-move rule and threefold repetition
     
     # sets the initial index for each piece on the board
     def initialize_piece_lists(self):
@@ -309,6 +311,9 @@ class Board:
         # XOR-in the current castle rights to Zobrist hash
         index_code = self.get_castle_rights_code()
         self.zobrist_hash ^= ZOBRIST_CASTLING_KEYS[index_code]
+
+        # add new position to the game history list
+        self.history.append(self.zobrist_hash)
             
     # move is a Move object containing necessary information for unmaking the move
     def unmake_move(self, move):
@@ -419,11 +424,15 @@ class Board:
 
         # revert Zobrist hash
         self.zobrist_hash = move.previous_zobrist_hash
+
+        # revert updates to the game history list
+        self.history.pop()
     
     def fifty_move_criteria_met(self):      # checks if criteria for fifty move rule have been met
         return self.half_move == 100
 
-    # used to make a copy of the board to make/unmake moves on during search
+    # used to make a copy of the current board before starting a search
+    # this is necessary to prevent iterative deepening time cap from abruptly preventing move reversal
     def copy(self):
         new_board = Board()
 
@@ -438,11 +447,25 @@ class Board:
         new_board.ply = self.ply
         new_board.en_passant_square = self.en_passant_square
         new_board.zobrist_hash = self.zobrist_hash
+        new_board.history = self.history[:]
         
         # Deepcopy the piece_lists dictionary
         new_board.piece_lists = copy.deepcopy(self.piece_lists)
         
         return new_board
+
+    # checks if the current position is a repetition
+    # a repetition is classified as a position at least once since the last irreversible (pawn or capture) move
+    def is_repetition(self):
+        # relevant history starts from the ply of the last irreversible move
+        lookback_start_index = self.ply - self.half_move
+
+        # search the relevant game history for a matching Zobrist key
+        for i in range(lookback_start_index, self.ply):
+            if self.history[i] == self.zobrist_hash:
+                return True
+        
+        return False
     
 # acts as a "time capsule", capturing a game state snapshot for complete move execution and reversal
 # used by generate_moves() during move validation and minimax() during game tree search
