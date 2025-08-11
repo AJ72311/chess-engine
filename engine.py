@@ -24,6 +24,9 @@ HISTORY_OUTER_INDICES = {
     'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11,
 }
 
+# used in delta pruning for quiescence search
+DELTA = 100
+
 # the Search class contains minimax's wrapper function search_root(), this is the algorithm for exploring the game tree
 class Search:
     class TimeUpError(Exception):
@@ -426,13 +429,23 @@ class Search:
         if len(legal_moves) == 0:
             return stand_pat_eval
 
-        # STEP 3: RECURSIVE CASE - SAME AS MINIMAX SEARCH, BUT SCOPE LIMITED TO CAPTURES / CHECK-EVASION ONLY
+        # STEP 3: RECURSIVE CASE - SAME AS MINIMAX SEARCH, BUT SCOPE LIMITED TO CAPTURES / CHECK-EVASIONS ONLY
         # move-ordering - sort captures using MVV-LVA
         legal_moves.sort(key=lambda move: self.score_move(move, 0), reverse=True)
 
         if color_to_play == 'white':
             max_eval = stand_pat_eval
             for move in legal_moves:
+                # first run delta pruning check
+                if check_count == 0: # cannot delta prune while in check
+                    attacker_value = PIECE_VALUES[move.moving_piece.lower()]
+                    victim_value = PIECE_VALUES[move.piece_captured.lower()]
+                    material_gain = (victim_value - attacker_value) * 100 # multiply by 100 for centipawn eval
+
+                    if stand_pat_eval + DELTA + material_gain < alpha:
+                        continue # prune
+
+                # if no delta prune, proceed
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
                     current_position, alpha, beta, 'black', 
@@ -451,6 +464,16 @@ class Search:
         elif color_to_play == 'black':
             min_eval = stand_pat_eval
             for move in legal_moves:
+                # first run delta pruning check
+                if check_count == 0: # cannot delta prune while in check
+                    attacker_value = PIECE_VALUES[move.moving_piece.lower()]
+                    victim_value = PIECE_VALUES[move.piece_captured.lower()]
+                    material_gain = (victim_value - attacker_value) * 100 # multiply by 100 for centipawn eval
+
+                    if stand_pat_eval - DELTA - material_gain > beta:
+                        continue # prune
+
+                # if no delta prune, proceed
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
                     current_position, alpha, beta, 'white', 
