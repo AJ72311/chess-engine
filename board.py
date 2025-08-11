@@ -90,7 +90,8 @@ class Board:
             hash ^= ZOBRIST_EP_KEYS[ep_file]
 
         # STEP 4: color to play updates
-        hash ^= ZOBRIST_COLOR_KEY       # XOR regardless of color to toggle hash at each ply
+        if self.color_to_play == 'black':
+            hash ^= ZOBRIST_COLOR_KEY       # XOR regardless of color to toggle hash at each ply
 
         return hash
     

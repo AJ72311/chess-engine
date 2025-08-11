@@ -84,8 +84,6 @@ class Search:
                 print('Warning: book move was illegal, proceeding with search')
         
         # if no book move found, proceed with normal search
-        # make a copy of the board to search on, this prevents time cutoffs from corrupting the original board
-        search_board = root_node.copy()
         start_time = time.time()
         final_best_move = None
 
@@ -93,6 +91,9 @@ class Search:
         try:
             # iterative deepening loop, increments search depth until reaching max depth or time limit
             for depth in range(1, self.depth + 1):
+                # make a copy of the board to search on, this prevents time cutoffs from corrupting the original board
+                search_board = root_node.copy()
+                
                 self.max_q_depth = 0    # reset max quiescence depth at each iteration
 
                 # check time limit before initiating a new root search
@@ -200,7 +201,7 @@ class Search:
         
         return best_move
 
-    # recursive game search, minimax + alpha-beta pruning, intial call by search_root is below
+    # recursive game search, minimax + alpha-beta pruning, initiated by search_root()
     def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time):
         # check if time limit exceeded before searching
         if (time.time() - start_time) > time_limit:
@@ -297,20 +298,27 @@ class Search:
                     break
 
             # after search completion, update transposition table
-            if max_eval <= original_alpha:      # alpha was never raised
+            if max_eval <= original_alpha:      
                 flag = 'UPPERBOUND'
-            elif max_eval >= beta:              # a beta cutoff occurred
+                max_eval = original_alpha
+            elif max_eval >= original_beta:              
                 flag = 'LOWERBOUND'
-            else:                               # search was completed with improvements in alpha and no beta cutoffs
+                max_eval = original_beta
+            else:                               
                 flag = 'EXACT'
             
             # create new entry / update existing entry in transposition table
-            transposition_table[position_hash] = {
-                'eval': max_eval,
-                'depth': depth,
-                'flag': flag,
-                'best_move': best_move
-            }
+            old = transposition_table.get(position_hash)
+            if (not old) or (depth >= old['depth']): # only write to TT if at deeper iteration than existing entry
+                entry = {
+                    'eval': max_eval,
+                    'depth': depth,
+                    'flag': flag,
+                }
+                if flag == 'EXACT': # only store a hash move for move-ordering if evaluation was exact
+                    entry['best_move'] = best_move
+
+                transposition_table[position_hash] = entry
 
             return max_eval
 
@@ -342,20 +350,27 @@ class Search:
                     break
             
             # after search completion, update transposition table
-            if min_eval <= alpha:               # alpha cut-off occurred, true score is at most min_eval
+            if min_eval <= original_alpha:      
                 flag = 'UPPERBOUND'
-            elif min_eval >= original_beta:     # search failed low, couldn't improve on original beta
+                min_eval = original_alpha
+            elif min_eval >= original_beta:              
                 flag = 'LOWERBOUND'
-            else:                               # search was completed within alpha-beta window, score is exact
+                min_eval = original_beta
+            else:                               
                 flag = 'EXACT'
 
             # create new entry / update existing entry in transposition table
-            transposition_table[position_hash] = {
-                'eval': min_eval,
-                'depth': depth,
-                'flag': flag,
-                'best_move': best_move
-            }
+            old = transposition_table.get(position_hash)
+            if (not old) or (depth >= old['depth']): # only write to TT if at deeper iteration than existing entry
+                entry = {
+                    'eval': min_eval,
+                    'depth': depth,
+                    'flag': flag,
+                }
+                if flag == 'EXACT': # only store a hash move for move-ordering if evaluation was exact
+                    entry['best_move'] = best_move
+
+                transposition_table[position_hash] = entry
             
             return min_eval
 
@@ -389,6 +404,8 @@ class Search:
         # only filter out non-captures if no checks... if a king is in check, we must evaluate all legal moves
         if check_count == 0:
             legal_moves = [move for move in legal_moves if move.piece_captured]
+            if not legal_moves: # if there are no legal non-captures, return the final evaluation
+                return evaluate_position(current_position)
 
         # second base case: hardcoded depth limit reached
         if q_depth >= max_depth: 
@@ -414,6 +431,7 @@ class Search:
         legal_moves.sort(key=lambda move: self.score_move(move, 0), reverse=True)
 
         if color_to_play == 'white':
+            max_eval = stand_pat_eval
             for move in legal_moves:
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
@@ -422,14 +440,16 @@ class Search:
                 )
                 current_position.unmake_move(move)
 
+                max_eval = max(max_eval, returned_eval)
                 alpha = max(alpha, returned_eval)
 
                 if alpha >= beta:
                     return beta
                 
-            return alpha
+            return max_eval
 
         elif color_to_play == 'black':
+            min_eval = stand_pat_eval
             for move in legal_moves:
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
@@ -438,12 +458,13 @@ class Search:
                 )
                 current_position.unmake_move(move)
 
+                min_eval = min(min_eval, returned_eval)
                 beta = min(beta, returned_eval)
 
                 if beta <= alpha:
                     return alpha
                 
-            return beta
+            return min_eval
 
 # helper function, retreives a move from the opening book if available
 # returns the book move in UCI format if found, otherwise None
