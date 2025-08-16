@@ -294,17 +294,32 @@ class Search:
                 
                 # 2: null window (alpha, alpha+1) search for all subsequent moves
                 else:
+                    reduction = 0   # used in late-move reductions
+                    
+                    # LMR conditions
+                    if (
+                        (depth >= 3)
+                        and (move_index >= 3) 
+                        and (not move.piece_captured) 
+                        and (not move.promotion_piece)
+                        and (check_count == 0)
+                    ):
+                        reduction = 1   # reduce depth for late moves
+
+                    # apply reduction (if any) to the search
+                    reduced_depth = depth - 1 - reduction
+
                     returned_eval = self.minimax(
                         current_position, 
                         alpha, 
                         alpha + 1, 
                         'black', 
-                        depth - 1, 
+                        reduced_depth, 
                         time_limit, 
                         start_time
                     )
 
-                    # 3: if null window search failed high, re-search with a full window
+                    # 3: if null window search failed high, re-search with a full window to full depth
                     if returned_eval > alpha and returned_eval < beta:
                         returned_eval = self.minimax(
                             current_position, 
@@ -382,17 +397,33 @@ class Search:
 
                 # 2: null window (beta - 1, beta) search for all subsequent moves
                 else:
+                    reduction = 0   # used in late-move reductions
+                    
+                    # LMR conditions
+                    # LMR conditions
+                    if (
+                        (depth >= 3)
+                        and (move_index >= 3) 
+                        and (not move.piece_captured) 
+                        and (not move.promotion_piece)
+                        and (check_count == 0)
+                    ):
+                        reduction = 1   # reduce depth for late moves
+
+                    # apply reduction (if any) to the search
+                    reduced_depth = depth - 1 - reduction
+
                     returned_eval = self.minimax(
                         current_position, 
                         beta - 1, 
                         beta, 
                         'white', 
-                        depth - 1, 
+                        reduced_depth, 
                         time_limit, 
                         start_time
                     )
 
-                    # 3: if null window search failed low, re-search with a full window
+                    # 3: if null window search failed low, re-search with a full window to full depth
                     if returned_eval < beta and returned_eval > alpha:
                         returned_eval = self.minimax(
                             current_position, 
