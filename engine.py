@@ -277,9 +277,45 @@ class Search:
             max_eval = -INFINITY
             best_move = None         # track best move to store in TT for move-ordering
 
-            for move in legal_moves:
+            for move_index, move in enumerate(legal_moves):
                 current_position.make_move(move)
-                returned_eval = self.minimax(current_position, alpha, beta, 'black', depth - 1, time_limit, start_time)
+
+                # 1: full window (alpha, beta) search for the first move
+                if move_index == 0:
+                    returned_eval = self.minimax(
+                        current_position, 
+                        alpha, 
+                        beta, 
+                        'black', 
+                        depth - 1, 
+                        time_limit, 
+                        start_time
+                    )
+                
+                # 2: null window (alpha, alpha+1) search for all subsequent moves
+                else:
+                    returned_eval = self.minimax(
+                        current_position, 
+                        alpha, 
+                        alpha + 1, 
+                        'black', 
+                        depth - 1, 
+                        time_limit, 
+                        start_time
+                    )
+
+                    # 3: if null window search failed high, re-search with a full window
+                    if returned_eval > alpha and returned_eval < beta:
+                        returned_eval = self.minimax(
+                            current_position, 
+                            alpha, 
+                            beta, 
+                            'black', 
+                            depth - 1, 
+                            time_limit, 
+                            start_time
+                        )
+
                 current_position.unmake_move(move)
 
                 if returned_eval > max_eval:
@@ -329,9 +365,45 @@ class Search:
             min_eval = INFINITY
             best_move = None     # track the best move to store in TT for move-ordering
 
-            for move in legal_moves:
+            for move_index, move in enumerate(legal_moves):
                 current_position.make_move(move)
-                returned_eval = self.minimax(current_position, alpha, beta, 'white', depth - 1, time_limit, start_time)
+
+                # 1: full window (alpha, beta) search for the first move
+                if move_index == 0:
+                    returned_eval = self.minimax(
+                        current_position, 
+                        alpha, 
+                        beta, 
+                        'white', 
+                        depth - 1, 
+                        time_limit, 
+                        start_time
+                    )
+
+                # 2: null window (beta - 1, beta) search for all subsequent moves
+                else:
+                    returned_eval = self.minimax(
+                        current_position, 
+                        beta - 1, 
+                        beta, 
+                        'white', 
+                        depth - 1, 
+                        time_limit, 
+                        start_time
+                    )
+
+                    # 3: if null window search failed low, re-search with a full window
+                    if returned_eval < beta and returned_eval > alpha:
+                        returned_eval = self.minimax(
+                            current_position, 
+                            alpha, 
+                            beta, 
+                            'white', 
+                            depth - 1, 
+                            time_limit, 
+                            start_time
+                        )
+
                 current_position.unmake_move(move)
 
                 if returned_eval < min_eval:
@@ -340,7 +412,7 @@ class Search:
 
                 beta = min(beta, returned_eval)
 
-                if beta <= alpha:   # beta cut-off, update killer and history tables, break
+                if beta <= alpha:   # alpha cut-off, update killer and history tables, break
                     if not move.piece_captured:     # if this was not a capture
                         # shift over top two killer moves for this depth
                         killer_table[depth][1] = killer_table[depth][0]
