@@ -27,6 +27,9 @@ HISTORY_OUTER_INDICES = {
 # used in delta pruning for quiescence search
 DELTA = 100
 
+# margins for futility pruning, indexed by remaining depth
+FUTILITY_MARGINS = [0, 100, 300]
+
 # the Search class contains minimax's wrapper function search_root(), this is the algorithm for exploring the game tree
 class Search:
     class TimeUpError(Exception):
@@ -241,6 +244,14 @@ class Search:
             return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
         
         # RECURSIVE CASE: 
+
+        # futility pruning setup
+        futility_enabled = False
+        static_eval = 0
+        if depth <= 2 and check_count == 0: # only allow futility pruning if no checks and depth is below 3
+            futility_enabled = True
+            static_eval = evaluate_position(current_position)
+
         original_alpha = alpha
         original_beta = beta
 
@@ -278,6 +289,15 @@ class Search:
             best_move = None         # track best move to store in TT for move-ordering
 
             for move_index, move in enumerate(legal_moves):
+                # first, check if futility pruning applies
+                if futility_enabled:
+                    if not move.piece_captured and not move.promotion_piece: # futility pruning only for quiet moves
+                        margin = FUTILITY_MARGINS[depth]
+
+                        # if current eval + safety margin still can't raise alpha
+                        if (static_eval + margin) <= alpha:
+                            continue # skip to next move
+
                 current_position.make_move(move)
 
                 # 1: full window (alpha, beta) search for the first move
@@ -381,6 +401,15 @@ class Search:
             best_move = None     # track the best move to store in TT for move-ordering
 
             for move_index, move in enumerate(legal_moves):
+                # first, check if futility pruning applies
+                if futility_enabled:
+                    if not move.piece_captured and not move.promotion_piece: # futility pruning only for quiet moves
+                        margin = FUTILITY_MARGINS[depth]
+
+                        # if current eval - safety margin still can't lower beta
+                        if (static_eval - margin) >= beta:
+                            continue # skip to next move
+
                 current_position.make_move(move)
 
                 # 1: full window (alpha, beta) search for the first move
