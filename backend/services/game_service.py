@@ -13,21 +13,34 @@ def new_game(player_move: str | None):
     game_id = str(uuid.uuid4())
 
     # store new game in active sessions
-    active_sessions[game_id] = search
-
-    engine_color = 'black' if player_move else 'white' # engine plays as white if no move was sent
-    max_think_time = 6
+    active_sessions[game_id] = {
+        'search': search,
+        'board': board,
+    }
 
     # if applicable, make the player's move first
-    legal_moves, check_count = generate_moves(board)
     if player_move:
-        move_to_make = parse_user_move(player_move, legal_moves)
+        _make_player_move(board, player_move)
 
-        if move_to_make:
-            board.make_move(move_to_make)
-        else:
-            raise ValueError('User-provided move is invalid')
+    # computer's turn
+    _play_engine_turn(board, search, 6) # max think time of 6 seconds
+    
+    return (
+        board_to_fen(board),
+        game_id,
+    )
 
+def _make_player_move(board, player_move):
+    legal_moves, _ = generate_moves(board)
+    move_to_make = parse_user_move(player_move, legal_moves)
+
+    if move_to_make:
+        board.make_move(move_to_make)
+    else:
+        raise ValueError('User-provided move is invalid')
+    
+def _play_engine_turn(board, search, max_think_time):
+    engine_color = board.color_to_play
     print(f'Engine ({engine_color}) is thinking...')
 
     start_time = time.time()  # log time for performance testing
@@ -41,8 +54,3 @@ def new_game(player_move: str | None):
     print(f'Engine move: {move_to_algebraic(engine_move)}')
     
     board.make_move(engine_move)
-    
-    return (
-        board_to_fen(board),
-        game_id,
-    )
