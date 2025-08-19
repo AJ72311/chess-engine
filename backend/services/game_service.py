@@ -5,8 +5,10 @@ from utils import board_to_fen, move_to_algebraic, parse_user_move
 import uuid
 import time
 
-active_sessions = {} # store a Seach instance for each on-going game, indexed by a uuid
+active_sessions = {}    # store a Board and Seach instance for each on-going game, indexed by a uuid
+ENGINE_THINK_TIME = 6   # engine think time capped at 6 seconds
 
+# creates a new active session and initializes the Board and Search instances
 def new_game(player_move: str | None):
     board = Board()
     search = Search(depth=64)
@@ -23,12 +25,38 @@ def new_game(player_move: str | None):
         _make_player_move(board, player_move)
 
     # computer's turn
-    _play_engine_turn(board, search, 6) # max think time of 6 seconds
+    _play_engine_turn(board, search, ENGINE_THINK_TIME)
     
     return (
         board_to_fen(board),
         game_id,
     )
+
+# receives player's move from frontned, plays it, and returns FEN with response
+def play_move(player_move: str, session_id: str, client_fen: str):
+    # get this session's board and search instances
+    session_data = active_sessions.get(session_id)
+    
+    if not session_data:
+        raise KeyError('Invalid session ID')
+    
+    board = session_data['board']
+    search = session_data['search']
+
+    # ensure the client's FEN is the same as the server's
+    server_fen = board_to_fen(board)
+    if (server_fen != client_fen):
+        raise ValueError('Client board is out of sync')
+    
+
+    # make the player's move
+    _make_player_move(board, player_move)
+
+    # play the engine's response
+    _play_engine_turn(board, search, ENGINE_THINK_TIME)
+
+    # return the updated FEN
+    return board_to_fen(board)
 
 def _make_player_move(board, player_move):
     legal_moves, _ = generate_moves(board)

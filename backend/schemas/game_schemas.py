@@ -8,3 +8,11 @@ class NewGameRequest(BaseModel):
 class NewGameResponse(BaseModel):
     new_fen: str
     game_id: str
+
+class PlayMoveRequest(BaseModel):
+    player_move: str
+    session_id: str
+    client_fen: str
+
+class PlayMoveResponse(BaseModel):
+    new_fen: str
