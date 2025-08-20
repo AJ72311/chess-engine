@@ -39,6 +39,7 @@ class Search:
     def __init__(self, depth=64):    # initialize max possible depth, move-ordering heuristics
         self.depth = depth
         self.max_q_depth = 0         # track maximum depth reached in quiescence search
+        self.nodes_searched = 0      # track total positions explored per root search
 
         # KILLER TABLE: at each depth, store 'killer' moves: extremely strong quiet moves in sibling node
         # stores a maximum of two killer Move objects for each depth
@@ -84,13 +85,20 @@ class Search:
             move_to_play = parse_user_move(book_move_uci, legal_moves) # get move object and convert to algebraic uci format
 
             if move_to_play:
-                return move_to_play
+                return {
+                    'move': move_to_play,
+                    'depth': None,
+                    'nodes': None,
+                    'is_book': True,
+                }
             else:
                 # safety check in case book is corrupted
                 print('Warning: book move was illegal, proceeding with search')
         
         # if no book move found, proceed with normal search
         start_time = time.time()
+        self.nodes_searched = 0
+        last_completed_depth = 0
         final_best_move = None
 
         # use a try/catch block to catch TimeUp errors
@@ -121,6 +129,7 @@ class Search:
 
                 if best_move_this_depth is not None:
                     final_best_move = best_move_this_depth  # update overall best move to current depth's best move
+                    last_completed_depth = depth
                     time_elapsed = time.time() - start_time
                     print(f'Depth {depth} completed in {time_elapsed:.2f}s')
                 else:
@@ -131,7 +140,12 @@ class Search:
         except self.TimeUpError:
             print('Time limit reached. Using best move from the last completed depth')
 
-        return final_best_move  # after iterative deepening move ends, return the final best move
+        return {
+            'move': final_best_move,
+            'depth': last_completed_depth,
+            'nodes': self.nodes_searched,
+            'is_book': False,
+        }
 
     # wrapper function for minimax, returns the move with the most favorable evaluation for the provided color_to_play
     def search_root(
@@ -212,6 +226,8 @@ class Search:
         # check if time limit exceeded before searching
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
+
+        self.nodes_searched += 1
 
         # BASE CASE 1: threefold repetitions
         if current_position.is_repetition():
@@ -515,12 +531,14 @@ class Search:
         self, current_position, alpha, beta, color_to_play, 
         time_limit, start_time, q_depth=1, max_depth=8
     ):
-
+        
         self.max_q_depth = max(self.max_q_depth, q_depth)
 
         # before searching, check if time limit exceeded
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
+        
+        self.nodes_searched += 1
 
         # STEP 1: BASE CASES & MOVE GENERATION
         legal_moves, check_count = generate_moves(current_position)
