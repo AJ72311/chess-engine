@@ -7,6 +7,10 @@ class NewGameRequest(BaseModel):
 
 class NewGameResponse(BaseModel):
     new_fen: str
+    move_played: str
+    depth_reached: int | None
+    nodes_searched: int | None
+    is_book: bool
     game_id: str
 
 class PlayMoveRequest(BaseModel):
@@ -16,3 +20,7 @@ class PlayMoveRequest(BaseModel):
 
 class PlayMoveResponse(BaseModel):
     new_fen: str
+    move_played: str
+    depth_reached: int | None
+    nodes_searched: int | None
+    is_book: bool

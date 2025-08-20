@@ -11,9 +11,17 @@ async def new_game(request: NewGameRequest):
         # run search in thread pool to avoid blocking server event loop
         new_game = await run_in_threadpool(game_service.new_game, request.player_move)
         
+        new_fen = new_game[0]
+        move_info = new_game[1]
+        game_id = new_game[2]
+
         return NewGameResponse(
-            new_fen = new_game[0],
-            game_id = new_game[1],
+            new_fen = new_fen,
+            move_played = move_info['move'],
+            depth_reached = move_info['depth'],
+            nodes_searched = move_info['nodes'],
+            is_book = move_info['is_book'],
+            game_id = game_id,
         )
     
     except ValueError as e:
@@ -31,15 +39,22 @@ async def new_game(request: NewGameRequest):
 async def play_move(request: PlayMoveRequest):
     try:
         # run search in thread pool to avoid blocking server event loop
-        new_fen = await run_in_threadpool(
+        engine_response = await run_in_threadpool(
             game_service.play_move, 
             request.player_move, 
             request.session_id,
             request.client_fen
         )
 
+        new_fen = engine_response[0]
+        move_info = engine_response[1]
+
         return PlayMoveResponse(
-            new_fen = new_fen
+            new_fen = new_fen,
+            move_played = move_info['move'],
+            depth_reached = move_info['depth'],
+            nodes_searched = move_info['nodes'],
+            is_book = move_info['is_book']
         )
     
     except (ValueError, KeyError) as e:
