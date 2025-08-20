@@ -9,3 +9,61 @@
     width: 560px;
     max-width: 90vw;
 }
+
+.countdown {
+    text-align: center;
+    color: white;
+    font-size: 24px;
+    padding-bottom: 5px;
+}
+
+.engineStats {
+    display: flex;
+    justify-content: space-around;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    font-style: italic;
+    font-family: monospace;
+    padding-bottom: 12px;
+    gap: 25px;
+}
+
+.stat {
+    display: inline-flex;
+    align-items: center; 
+}
+
+.odometerInline {
+    display: inline-block;
+    vertical-align: middle; 
+    margin-left: 0.2rem;  
+    line-height: 1;      
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.spinner {
+    display: block;
+    margin: 0.5rem auto 10px;
+    width: 60px;
+    height: auto;
+    transform-origin: center;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    animation: spin 2s linear infinite;
+}
+
+/* when loading: fully visible */
+.spinnerVisible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* when not loading: invisible but occupies space */
+.spinnerHidden {
+    opacity: 0;
+    visibility: hidden;
+}

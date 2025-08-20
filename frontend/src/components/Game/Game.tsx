@@ -2,6 +2,10 @@ import { useState, useRef, useCallback, type CSSProperties, useEffect } from 're
 import { Chessboard } from 'react-chessboard';
 import { Chess, type Square } from 'chess.js';
 import styles from './Game.module.css';
+import axios from 'axios';
+import Odometer from 'react-odometerjs';
+import 'odometer/themes/odometer-theme-default.css';
+import cogUrl from '../../assets/cog.svg?url'
 
 type SquareStyles = Partial<Record<Square, CSSProperties>>;
 
@@ -13,12 +17,65 @@ function Game() {
     // track current position FEN in state to trigger re-renders
     const [boardPosition, setBoardPosition] = useState<string>(chessGame.fen());
     
-    // used for showing move options when clicking on a piece
+    // used for showing move options and highlights when clicking on a piece
     const [moveFrom, setMoveFrom] = useState<string>('');
     const [optionSquares, setOptionSquares] = useState<object>({});
-
-    // used for highlighting king's square when in check
     const [checkHighlight, setCheckHighlight] = useState<object>({});
+    const [lastMoveHighlight, setLastMoveHighlight] = useState<object>({});
+
+    // used to track the session with the engine's api
+    const [sessionID, setSessionID] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [countdown, setCountdown] = useState<number>(0);
+    const [positionsSearched, setPositionsSearched] = useState<number>(0);
+    const [depthSearched, setDepthSearched] = useState<number>(0);
+
+    // gets the engine's response to a player's move, returns updated FEN with engine stats
+    const handleMove = useCallback(async (playerMove: string) => {
+        try {
+            if (!sessionID) {
+                const response = await axios.post('/game/new-game', {
+                    player_move: playerMove,
+                });
+
+                const newFEN = response.data.new_fen;  // updated FEN
+                const gameID = response.data.game_id;  // sessionID
+                const movePlayed = response.data.move_played;
+                const depthReached = response.data.depth_reached;
+                const nodesSearched = response.data.nodes_searched;
+
+                setBoardPosition(newFEN);
+                setLastMoveHighlight(highlightFromUCI(movePlayed));
+                setPositionsSearched(nodesSearched);
+                setDepthSearched(depthReached);
+
+                chessGame.load(newFEN);
+                setSessionID(gameID);
+            
+            } else {
+                const response = await axios.post('/game/play-move', {
+                    player_move: playerMove,
+                    session_id: sessionID,
+                    client_fen: boardPosition,
+                });
+
+                const newFEN = response.data.new_fen;
+                const movePlayed = response.data.move_played;
+                const depthReached = response.data.depth_reached;
+                const nodesSearched = response.data.nodes_searched;
+
+                setLastMoveHighlight(highlightFromUCI(movePlayed));
+                setPositionsSearched(nodesSearched);
+                setDepthSearched(depthReached);
+
+                chessGame.load(newFEN);
+                setBoardPosition(newFEN);
+            }
+        
+        } catch (error) {
+            throw error;
+        }
+    }, [sessionID, boardPosition]);
 
     // helper function for useEffect, finds king index to highlight in red for checks
     function findKingSquare(color: 'w' | 'b'): Square {
@@ -35,7 +92,7 @@ function Game() {
         throw new Error('King not found');
     }
 
-    // runs upon a new move
+    // runs upon a new move, highlights king square to red if in check
     useEffect(() => {
         if (chessGame.inCheck()) {
             const kingSq = findKingSquare(chessGame.turn());
@@ -49,6 +106,27 @@ function Game() {
             setCheckHighlight({});
         }
         }, [boardPosition]); 
+
+    // runs upon a new move, sets the engine move countdown timer
+    useEffect(() => {
+        if (!isLoading) {
+            setCountdown(0);
+            return;
+        }
+
+        setCountdown(5);
+        const timer = setInterval(() => {
+            setCountdown(c => {
+                if (c <= 1) {
+                    clearInterval(timer);
+                    return 0;
+                }
+                return c - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [isLoading]);
 
     // helper function, determines if the piece clicked has valid moves
     function getMoveOptions(square: Square): boolean {
@@ -83,11 +161,21 @@ function Game() {
 
         // highlight the square to be departed
         newSquares[square] = {
-            background: 'rgba(255, 255, 0, 0.4)',
+            background: 'rgba(246, 164, 64, 0.5)',
         };
 
         setOptionSquares(newSquares);
         return true;
+    }
+
+    // helper function, helps highlight the most recently played move
+    function highlightFromUCI(move: string): SquareStyles {
+        const from = move.slice(0,2) as Square;
+        const to   = move.slice(2,4) as Square;
+        return {
+            [from]: { background: 'rgba(246, 164, 64, 0.5)' },  // blue for “from”
+            [to]:   { background: 'rgba(246, 164, 64, 0.5)' }   // green for “to”
+        };
     }
 
     const onDragBegin = useCallback((_piece: string, source: Square) => {
@@ -97,7 +185,7 @@ function Game() {
         // build a styles object for each target square and the source square
         const styles: SquareStyles = {};
         // highlight the departing square in yellow
-        styles[source] = { background: 'rgba(255,255,0,0.4)' };
+        styles[source] = { background: 'rgba(246, 164, 64, 0.5)' };
 
         // show dots on target squares
         moves.forEach(move => {
@@ -105,7 +193,7 @@ function Game() {
                 background: chessGame.get(move.to) &&
                 chessGame.get(move.to)?.color !== 
                 chessGame.get(source)?.color ? 
-                'radial-gradient(circle, rgba(0,0,0,.1) 85%, transparent 85%)' : // big circle if capture
+                'radial-gradient(circle, rgba(0,0,0,.1) 60%, transparent 60%)' : // big circle if capture
                 'radial-gradient(circle, rgba(0,0,0,.1) 25%, transparent 25%)',
 
                 // smaller circle for non-captures
@@ -123,7 +211,7 @@ function Game() {
 
         // try making the move according to chess.js logic
         try {
-            chessGame.move({
+            const result = chessGame.move({
                 from: sourceSqr,
                 to: destinationSqr,
                 promotion: 'q', // always promote to queen for simplicity
@@ -131,13 +219,24 @@ function Game() {
 
             // if the move succeeded
             setBoardPosition(chessGame.fen());
+            setLastMoveHighlight(highlightFromUCI(`${sourceSqr}${destinationSqr}${result.promotion??''}`));
+
+            // post to api
+            setIsLoading(true);
+            handleMove(`${sourceSqr}${destinationSqr}${result.promotion ?? ''}`)
+            .catch(() => {
+                chessGame.undo(); // if server problem, roll back locally
+                setBoardPosition(chessGame.fen());
+            })
+            .finally(() => setIsLoading(false));
+
             return true;
         
         } catch {
             // if the move failed
             return false;
         }
-    }, [chessGame]);
+    }, [chessGame, handleMove]);
 
     const onDragEnd = useCallback(() => {
         // user released outside valid square or cancelled drag, reset valid move options
@@ -156,7 +255,6 @@ function Game() {
         // if a square to be departed hasn't been set yet, generate valid moves
         if (!moveFrom) {
             const hasMoveOptions = getMoveOptions(square as Square);
-        
 
             // if there are valid move options, set the moveFrom square
             if (hasMoveOptions) {
@@ -185,7 +283,7 @@ function Game() {
 
         // if valid move, check for legality
         try {
-            chessGame.move({
+            const result = chessGame.move({
                 from: moveFrom,
                 to: square,
                 promotion: 'q', // always promote to queen for simplicity
@@ -193,6 +291,17 @@ function Game() {
 
             // if move succeeded, clear and return
             setBoardPosition(chessGame.fen());
+            setLastMoveHighlight(highlightFromUCI(`${moveFrom}${square}${result.promotion??''}`));
+
+            // post to api
+            setIsLoading(true);
+            handleMove(`${moveFrom}${square}${result.promotion ?? ''}`)
+            .catch(() => {
+                chessGame.undo(); // if server problem, roll back locally
+                setBoardPosition(chessGame.fen());
+            })
+            .finally(() => setIsLoading(false));
+
             setOptionSquares({});
             setMoveFrom('');
             return;
@@ -209,18 +318,58 @@ function Game() {
             // return early
             return;
         }
-    }, [chessGame, moveFrom]);
+    }, [chessGame, moveFrom, handleMove]);
 
     return (
         <div className={styles.container}>
             <div className={styles.chessboardContainer}>
+                <div className={styles.countdown}>
+                    {isLoading
+                        ? `Engine is thinking… ${countdown}s`
+                        : `Your turn!`
+                    }
+                    
+                    <img
+                        src={cogUrl}
+                        alt="Loading spinner"
+                        className={`${styles.spinner} ${
+                            isLoading ? styles.spinnerVisible : styles.spinnerHidden
+                        }`}
+                    />
+                    </div>
+                {/* positions explored and depth reached stats */}
+                <div className={styles.engineStats}>
+                    <span className={styles.stat}>
+                        Depth Reached:&nbsp;
+                        <Odometer
+                            value={depthSearched}
+                            format="(,ddd)"
+                            duration={150}
+                            theme="default"
+                            className={styles.odometerInline}
+                        />
+                    </span>
+
+                    <span className={styles.stat}>
+                        Positions Explored:&nbsp;
+                        <Odometer
+                            value={positionsSearched}
+                            format="(,ddd)"
+                            duration={500}
+                            theme="default"
+                            className={styles.odometerInline}
+                        />
+                    </span>
+                </div>
                 <Chessboard 
                     position={boardPosition}
                     onPieceDrop={onDrop}
-                    onSquareClick={onSqrClick}
+                    onSquareClick={isLoading ? undefined : onSqrClick} // only makes moves if not loading
+                    arePiecesDraggable={!isLoading} // can only drag pieces when not loading
                     customSquareStyles={{
                         ...optionSquares,
                         ...checkHighlight,
+                        ...lastMoveHighlight,
                     }}
                     onPieceDragBegin={onDragBegin}
                     onPieceDragEnd={onDragEnd}
