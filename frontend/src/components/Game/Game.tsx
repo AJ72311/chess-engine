@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, type CSSProperties, useEffect } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { Chess, type Square } from 'chess.js';
+import { StatusLines } from './StatusLines'
 import styles from './Game.module.css';
 import axios from 'axios';
 import Odometer from 'react-odometerjs';
 import 'odometer/themes/odometer-theme-default.css';
-import cogUrl from '../../assets/cog.svg?url'
 
 type SquareStyles = Partial<Record<Square, CSSProperties>>;
 
@@ -16,6 +16,7 @@ function Game() {
 
     // track current position FEN in state to trigger re-renders
     const [boardPosition, setBoardPosition] = useState<string>(chessGame.fen());
+    const [gameOver, setGameOver] = useState<string>('');
     
     // used for showing move options and highlights when clicking on a piece
     const [moveFrom, setMoveFrom] = useState<string>('');
@@ -30,50 +31,57 @@ function Game() {
     const [positionsSearched, setPositionsSearched] = useState<number>(0);
     const [depthSearched, setDepthSearched] = useState<number>(0);
 
-    // gets the engine's response to a player's move, returns updated FEN with engine stats
+    // try a player's move, get the engine's response if player move is valid
     const handleMove = useCallback(async (playerMove: string) => {
+        // get the engine's reply
+        setIsLoading(true);
         try {
-            if (!sessionID) {
-                const response = await axios.post('/game/new-game', {
-                    player_move: playerMove,
-                });
+            const endpoint = sessionID ? '/game/play-move' : '/game/new-game';
+            const payload = sessionID
+            ? {
+                'session_id': sessionID,
+                'player_move': playerMove,
+                'client_fen': boardPosition,
+            } : {
+                'player_move': playerMove,
+            }
 
-                const newFEN = response.data.new_fen;  // updated FEN
-                const gameID = response.data.game_id;  // sessionID
-                const movePlayed = response.data.move_played;
-                const depthReached = response.data.depth_reached;
-                const nodesSearched = response.data.nodes_searched;
+            const data = await axios.post(endpoint, payload);
 
-                setBoardPosition(newFEN);
-                setLastMoveHighlight(highlightFromUCI(movePlayed));
-                setPositionsSearched(nodesSearched);
-                setDepthSearched(depthReached);
+            // unpack response
+            const newFEN = data.data.new_fen;
+            const movePlayed = data.data.move_played;
+            const depthReached = data.data.depth_reached;
+            const nodesSearched = data.data.nodes_searched;
+            const gameID = data.data.game_id ? data.data.game_id : null; // gameID only in /new-game
 
-                chessGame.load(newFEN);
+            setBoardPosition(newFEN);
+            chessGame.load(newFEN);
+            setPositionsSearched(nodesSearched);
+            setDepthSearched(depthReached);
+            setLastMoveHighlight(highlightFromUCI(movePlayed));
+
+            if (gameID) {
                 setSessionID(gameID);
-            
-            } else {
-                const response = await axios.post('/game/play-move', {
-                    player_move: playerMove,
-                    session_id: sessionID,
-                    client_fen: boardPosition,
-                });
+            }
 
-                const newFEN = response.data.new_fen;
-                const movePlayed = response.data.move_played;
-                const depthReached = response.data.depth_reached;
-                const nodesSearched = response.data.nodes_searched;
+            // check for game over after the engine's move
+            if (chessGame.isGameOver()) {
+                const reason = chessGame.isCheckmate() 
+                ? 'checkmate' 
+                : chessGame.isStalemate()
+                ? 'stalemate'
+                : 'draw';
 
-                setLastMoveHighlight(highlightFromUCI(movePlayed));
-                setPositionsSearched(nodesSearched);
-                setDepthSearched(depthReached);
-
-                chessGame.load(newFEN);
-                setBoardPosition(newFEN);
+                setGameOver(reason);
+                return; 
             }
         
         } catch (error) {
             throw error;
+        
+        } finally {
+            setIsLoading(false)
         }
     }, [sessionID, boardPosition]);
 
@@ -221,6 +229,18 @@ function Game() {
             setBoardPosition(chessGame.fen());
             setLastMoveHighlight(highlightFromUCI(`${sourceSqr}${destinationSqr}${result.promotion??''}`));
 
+            // check for game over after the player's move
+            if (chessGame.isGameOver()) {
+                const reason = chessGame.isCheckmate() 
+                ? 'checkmate' 
+                : chessGame.isStalemate()
+                ? 'stalemate'
+                : 'draw';
+
+                setGameOver(reason);
+                return true; // don't get engine's response if game is over
+            }
+
             // post to api
             setIsLoading(true);
             handleMove(`${sourceSqr}${destinationSqr}${result.promotion ?? ''}`)
@@ -289,9 +309,21 @@ function Game() {
                 promotion: 'q', // always promote to queen for simplicity
             });
 
-            // if move succeeded, clear and return
+            // if move succeeded
             setBoardPosition(chessGame.fen());
             setLastMoveHighlight(highlightFromUCI(`${moveFrom}${square}${result.promotion??''}`));
+
+            // check for game over after the player's move
+            if (chessGame.isGameOver()) {
+                const reason = chessGame.isCheckmate() 
+                ? 'checkmate' 
+                : chessGame.isStalemate()
+                ? 'stalemate'
+                : 'draw';
+
+                setGameOver(reason);
+                return; // don't get engine's response if game is over
+            }
 
             // post to api
             setIsLoading(true);
@@ -323,20 +355,11 @@ function Game() {
     return (
         <div className={styles.container}>
             <div className={styles.chessboardContainer}>
-                <div className={styles.countdown}>
-                    {isLoading
-                        ? `Engine is thinking… ${countdown}s`
-                        : `Your turn!`
-                    }
-                    
-                    <img
-                        src={cogUrl}
-                        alt="Loading spinner"
-                        className={`${styles.spinner} ${
-                            isLoading ? styles.spinnerVisible : styles.spinnerHidden
-                        }`}
-                    />
-                    </div>
+                <StatusLines 
+                    gameOver={gameOver}
+                    isLoading={isLoading}
+                    countdown={countdown}
+                />
                 {/* positions explored and depth reached stats */}
                 <div className={styles.engineStats}>
                     <span className={styles.stat}>
@@ -345,7 +368,6 @@ function Game() {
                             value={depthSearched}
                             format="(,ddd)"
                             duration={150}
-                            theme="default"
                             className={styles.odometerInline}
                         />
                     </span>
@@ -356,7 +378,6 @@ function Game() {
                             value={positionsSearched}
                             format="(,ddd)"
                             duration={500}
-                            theme="default"
                             className={styles.odometerInline}
                         />
                     </span>

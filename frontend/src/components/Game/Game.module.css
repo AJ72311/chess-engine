@@ -8,24 +8,29 @@
 .chessboardContainer {
     width: 560px;
     max-width: 90vw;
+    height: 100vw;
 }
 
 .countdown {
     text-align: center;
     color: white;
-    font-size: 24px;
-    padding-bottom: 5px;
+    font-size: 22px;
+    font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-top: 30px;
+    gap: 15px;
 }
 
 .engineStats {
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     color: white;
     font-size: 14px;
-    font-weight: bold;
-    font-style: italic;
     font-family: monospace;
-    padding-bottom: 12px;
+    padding-bottom: 6px;
     gap: 25px;
 }
 
@@ -41,29 +46,27 @@
     line-height: 1;      
 }
 
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
 .spinner {
-    display: block;
-    margin: 0.5rem auto 10px;
-    width: 60px;
-    height: auto;
-    transform-origin: center;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+    width: 50px;
     animation: spin 2s linear infinite;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-/* when loading: fully visible */
 .spinnerVisible {
     opacity: 1;
     visibility: visible;
 }
 
-/* when not loading: invisible but occupies space */
 .spinnerHidden {
     opacity: 0;
     visibility: hidden;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.message {
+  font-style: italic;
 }
