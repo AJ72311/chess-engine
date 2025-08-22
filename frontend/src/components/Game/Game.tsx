@@ -407,7 +407,6 @@ function Game() {
                         <span className={styles.stat}>
                             Depth Reached:&nbsp;
                             <Odometer
-                                key={depthSearched}
                                 value={depthSearched}
                                 format="(,ddd)"
                                 duration={150}
@@ -418,7 +417,6 @@ function Game() {
                         <span className={styles.stat}>
                             Positions Explored:&nbsp;
                             <Odometer
-                                key={positionsSearched}
                                 value={positionsSearched}
                                 format="(,ddd)"
                                 duration={150}

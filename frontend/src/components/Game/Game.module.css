@@ -22,16 +22,6 @@
     opacity: 1;
 }
 
-.chessboardWrapper {
-    border: 2px solid grey;
-    border-radius: 10px;
-    transition: border-color 1.5s ease;
-}
-
-.chessboardWrapper.illuminated {
-    border-color: #1b1b28;
-}
-
 .chessboardWrapper div[data-square] {
     transition: background-color 1.5s ease-in-out;
 }
@@ -46,10 +36,10 @@
 }
 
 .chessboardWrapper div[data-square-color='white'] {
-    background-color: #252525 !important;
+    background-color: #1e1e1e !important;
 }
 .chessboardWrapper div[data-square-color='black'] {
-    background-color: #000000 !important;
+    background-color: #141414 !important;
 }
 
 .chessboardWrapper.illuminated div[data-square-color='white'] {

@@ -4,7 +4,7 @@ import styles from './Game.module.css';
 import cogUrl from '../../assets/cog.svg?url'
 
 const ENGINE_MESSAGES = [
-    'Applying futility pruning',
+    'Applying futility pruning...',
     'Investigating principle variation...',
     'Applying late move reductions...',
     'Entering quiescence routine...',
