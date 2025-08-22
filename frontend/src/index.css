@@ -5,6 +5,11 @@ body {
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
         sans-serif;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;    
-    background-color: #1b1b28; 
+    -moz-osx-font-smoothing: grayscale;  
+    background-color: #000;
+    transition: background-color 1.5s ease;  
+}
+
+body.illuminated {
+    background-color: #1b1b28;
 }

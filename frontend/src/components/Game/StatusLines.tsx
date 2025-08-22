@@ -95,10 +95,12 @@ function useRotatingMessage(active: boolean, intervalMs = 1500) {
 export function StatusLines({
     gameOver,
     isLoading,
+    isIlluminated,
     countdown,
 } : {
     gameOver: string
     isLoading: boolean
+    isIlluminated: boolean
     countdown: number
 }) {
      // helper to format game over text
@@ -108,14 +110,16 @@ export function StatusLines({
     const engineMessage = useRotatingMessage(isLoading, 2000);
     const animatedMessage = gameOver
     ? formatGameOver(gameOver)
-    : isLoading
-    ? `${engineMessage}`
-    : 'Your turn!'
+    : isIlluminated
+        ? isLoading
+            ? `${engineMessage}`
+            : 'Your turn!'
+        : 'Engine is waking up...'
 
     return (
         <div className={styles.countdown} aria-live="polite">
             <div className={styles.timer} aria-live="off">
-                {isLoading
+                {isLoading || countdown > 0
                     ? `${countdown}s`          
                     : '...' 
                 }

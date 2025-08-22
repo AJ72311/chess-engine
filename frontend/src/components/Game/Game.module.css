@@ -9,6 +9,73 @@
     width: 560px;
     max-width: 90vw;
     height: 100%;
+    position: relative;
+}
+
+/* HANDLE BOARD DIMMING AND ILLUMINATION UPON STARTUP */
+.engineInfo {
+    opacity: 0;
+    transition: opacity 1.5s ease;
+}
+
+.engineInfo.illuminated {
+    opacity: 1;
+}
+
+.chessboardWrapper {
+    border: 2px solid grey;
+    border-radius: 10px;
+    transition: border-color 1.5s ease;
+}
+
+.chessboardWrapper.illuminated {
+    border-color: #1b1b28;
+}
+
+.chessboardWrapper div[data-square] {
+    transition: background-color 1.5s ease-in-out;
+}
+
+.chessboardWrapper div[data-piece] svg {
+    opacity: 0;
+    transition: opacity 1.5s ease-in-out;
+}
+
+.chessboardWrapper.illuminated div[data-piece] svg {
+    opacity: 1;
+}
+
+.chessboardWrapper div[data-square-color='white'] {
+    background-color: #252525 !important;
+}
+.chessboardWrapper div[data-square-color='black'] {
+    background-color: #000000 !important;
+}
+
+.chessboardWrapper.illuminated div[data-square-color='white'] {
+    background-color: #f0d9b5 !important;
+}
+
+.chessboardWrapper.illuminated div[data-square-color='black'] {
+    background-color: #b58863 !important;
+}
+
+.statusIndicator {
+    position: absolute; 
+    bottom: -35px;      
+    left: 50%;         
+    transform: translateX(-50%); 
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #28a745; 
+    transition: background-color 0.3s ease; 
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.7); 
+}
+
+.statusIndicator.statusBusy {
+    background-color: #dc3545; 
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.7);
 }
 
 .countdown {

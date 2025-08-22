@@ -30,6 +30,35 @@ function Game() {
     const [countdown, setCountdown] = useState<number>(0);
     const [positionsSearched, setPositionsSearched] = useState<number>(0);
     const [depthSearched, setDepthSearched] = useState<number>(0);
+    //const [isBookMove, setIsBookMove] = useState<boolean>(false);
+
+    // used to illuminate board on startup
+    const [isIlluminated, setIsIlluminated] = useState<boolean>(false);
+    const [startupCountdown, setStartupCountdown] = useState<number>(3);
+
+    // illuminate the board on component mount
+    useEffect(() => {
+    if (isIlluminated) return;
+
+    // start a 1-second interval timer
+    const interval = setInterval(() => {
+            setStartupCountdown(prev => {
+                // when the countdown reaches 1, the next tick will be 0.
+                if (prev <= 1) {
+                    clearInterval(interval); 
+
+                    setIsIlluminated(true);
+                    document.body.classList.add('illuminated');
+
+                    return 0; 
+                }
+                return prev - 1; 
+            });
+        }, 1000);
+
+        // Cleanup: clear the interval if the component unmounts
+        return () => clearInterval(interval);
+    }, [isIlluminated]);
 
     // try a player's move, get the engine's response if player move is valid
     const handleMove = useCallback(async (playerMove: string) => {
@@ -54,9 +83,20 @@ function Game() {
             const depthReached = data.data.depth_reached;
             const nodesSearched = data.data.nodes_searched;
             const gameID = data.data.game_id ? data.data.game_id : null; // gameID only in /new-game
+            //setIsBookMove(data.data.is_book);
+
+            const result = chessGame.move(movePlayed);
+            // safety check: if move was illegal, log  error and load the returned FEN
+            if (result === null) {
+                console.error(
+                    "Engine returned an illegal move:",
+                    movePlayed, 
+                    "Falling back to FEN load."
+                );
+                chessGame.load(newFEN);
+            }
 
             setBoardPosition(newFEN);
-            chessGame.load(newFEN);
             setPositionsSearched(nodesSearched);
             setDepthSearched(depthReached);
             setLastMoveHighlight(highlightFromUCI(movePlayed));
@@ -358,51 +398,65 @@ function Game() {
                 <StatusLines 
                     gameOver={gameOver}
                     isLoading={isLoading}
-                    countdown={countdown}
+                    isIlluminated={isIlluminated}
+                    countdown={startupCountdown > 0 ? startupCountdown : countdown}
                 />
-                {/* positions explored and depth reached stats */}
-                <div className={styles.engineStats}>
-                    <span className={styles.stat}>
-                        Depth Reached:&nbsp;
-                        <Odometer
-                            value={depthSearched}
-                            format="(,ddd)"
-                            duration={150}
-                            className={styles.odometerInline}
-                        />
-                    </span>
+                <div className={`${styles.engineInfo} ${isIlluminated ? styles.illuminated : ''}`}>
+                    {/* positions explored and depth reached stats */}
+                    <div className={styles.engineStats}>
+                        <span className={styles.stat}>
+                            Depth Reached:&nbsp;
+                            <Odometer
+                                key={depthSearched}
+                                value={depthSearched}
+                                format="(,ddd)"
+                                duration={150}
+                                className={styles.odometerInline}
+                            />
+                        </span>
 
-                    <span className={styles.stat}>
-                        Positions Explored:&nbsp;
-                        <Odometer
-                            value={positionsSearched}
-                            format="(,ddd)"
-                            duration={500}
-                            className={styles.odometerInline}
-                        />
-                    </span>
+                        <span className={styles.stat}>
+                            Positions Explored:&nbsp;
+                            <Odometer
+                                key={positionsSearched}
+                                value={positionsSearched}
+                                format="(,ddd)"
+                                duration={150}
+                                className={styles.odometerInline}
+                            />
+                        </span>
+                    </div>
                 </div>
-                <Chessboard 
-                    position={boardPosition}
-                    onPieceDrop={onDrop}
-                    onSquareClick={isLoading ? undefined : onSqrClick} // only makes moves if not loading
-                    arePiecesDraggable={!isLoading} // can only drag pieces when not loading
-                    customSquareStyles={{
-                        ...optionSquares,
-                        ...checkHighlight,
-                        ...lastMoveHighlight,
-                    }}
-                    onPieceDragBegin={onDragBegin}
-                    onPieceDragEnd={onDragEnd}
-                    customDropSquareStyle={{
-                        boxShadow: "inset 0 0 1px 4px rgba(255,255,255,0.6)"
-                    }}
-                    showBoardNotation={false}
-                    customBoardStyle={{
-                        borderRadius: '10px',
-                        boxShadow: '0 0 50px rgba(0, 0, 0, 1)',
-                    }}
-                />
+                <div className={`${styles.chessboardWrapper} ${isIlluminated ? styles.illuminated : ''}`}>
+                    <Chessboard 
+                        position={boardPosition}
+                        onPieceDrop={onDrop}
+                        onSquareClick={isLoading ? undefined : onSqrClick} // only make moves if not loading
+                        arePiecesDraggable={!isLoading} // can only drag pieces when not loading
+                        customSquareStyles={{
+                            ...optionSquares,
+                            ...checkHighlight,
+                            ...lastMoveHighlight,
+                        }}
+                        onPieceDragBegin={onDragBegin}
+                        onPieceDragEnd={onDragEnd}
+                        customDropSquareStyle={{
+                            boxShadow: "inset 0 0 1px 4px rgba(255,255,255,0.6)"
+                        }}
+                        showBoardNotation={false}
+                        customBoardStyle={{
+                            borderRadius: '10px',
+                            boxShadow: '0 0 50px rgba(0, 0, 0, 1)',
+                            transition: 'box-shadow 1.5s ease-in-out',
+                        }}
+                    />
+                </div>
+                <div 
+                    className={`
+                        ${styles.statusIndicator} 
+                        ${(isLoading || !isIlluminated || gameOver) ? styles.statusBusy : ''}
+                    `}
+                ></div>
             </div>
         </div>
     );
