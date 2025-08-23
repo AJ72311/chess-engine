@@ -30,7 +30,11 @@ function Game() {
     const [countdown, setCountdown] = useState<number>(0);
     const [positionsSearched, setPositionsSearched] = useState<number>(0);
     const [depthSearched, setDepthSearched] = useState<number>(0);
-    //const [isBookMove, setIsBookMove] = useState<boolean>(false);
+    const [isBookMove, setIsBookMove] = useState<boolean>(false);
+
+    // used to animate odometer when going from a book move to a normal one
+    const [odometerPositions, setOdometerPositions] = useState<number>(0);
+    const [odometerDepth, setOdometerDepth] = useState<number>(0);
 
     // used to illuminate board on startup
     const [isIlluminated, setIsIlluminated] = useState<boolean>(false);
@@ -60,6 +64,32 @@ function Game() {
         return () => clearInterval(interval);
     }, [isIlluminated]);
 
+    // briefly set odometer values to 0 to ensure animation when transitioning from "Book Move" string
+    const wasBookMoveRef = useRef<boolean>(false);
+    useEffect(() => {
+        if (wasBookMoveRef.current && !isBookMove) {
+            setOdometerDepth(0);
+            setOdometerPositions(0);
+
+            const timer = setTimeout(() => {
+                setOdometerPositions(positionsSearched);
+                setOdometerDepth(depthSearched);
+            }, 20);
+
+
+            return () => clearTimeout(timer);
+        
+        } else if (!isBookMove) {
+            setOdometerDepth(depthSearched);
+            setOdometerPositions(positionsSearched);
+        }
+    }, [isBookMove, depthSearched, positionsSearched]);
+
+    // keep wasBookMoveRef updated
+    useEffect(() => {
+        wasBookMoveRef.current = isBookMove;
+    }, [isBookMove]);
+
     // try a player's move, get the engine's response if player move is valid
     const handleMove = useCallback(async (playerMove: string) => {
         // get the engine's reply
@@ -83,7 +113,7 @@ function Game() {
             const depthReached = data.data.depth_reached;
             const nodesSearched = data.data.nodes_searched;
             const gameID = data.data.game_id ? data.data.game_id : null; // gameID only in /new-game
-            //setIsBookMove(data.data.is_book);
+            setIsBookMove(data.data.is_book);
 
             const result = chessGame.move(movePlayed);
             // safety check: if move was illegal, log  error and load the returned FEN
@@ -406,22 +436,34 @@ function Game() {
                     <div className={styles.engineStats}>
                         <span className={styles.stat}>
                             Depth Reached:&nbsp;
-                            <Odometer
-                                value={depthSearched}
-                                format="(,ddd)"
-                                duration={150}
-                                className={styles.odometerInline}
-                            />
+                            {
+                                chessGame.history().length < 2 ? '...' : isBookMove ? (
+                                    'Book Move'
+                                ) : (
+                                    <Odometer
+                                        value={odometerDepth}
+                                        format="(,ddd)"
+                                        duration={150}
+                                        className={styles.odometerInline}
+                                    />
+                                )
+                            }
                         </span>
 
                         <span className={styles.stat}>
                             Positions Explored:&nbsp;
-                            <Odometer
-                                value={positionsSearched}
-                                format="(,ddd)"
-                                duration={150}
-                                className={styles.odometerInline}
-                            />
+                            {
+                                chessGame.history().length < 2 ? '...' : isBookMove ? (
+                                    'Book Move'
+                                ) : (
+                                    <Odometer
+                                        value={odometerPositions}
+                                        format="(,ddd)"
+                                        duration={150}
+                                        className={styles.odometerInline}
+                                    />
+                                )
+                            }
                         </span>
                     </div>
                 </div>
