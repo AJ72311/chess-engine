@@ -34,7 +34,7 @@ function Game() {
 
     // used to illuminate board on startup
     const [isIlluminated, setIsIlluminated] = useState<boolean>(false);
-    const [startupCountdown, setStartupCountdown] = useState<number>(3);
+    const [startupCountdown, setStartupCountdown] = useState<number>(5);
 
     // illuminate the board on component mount
     useEffect(() => {
