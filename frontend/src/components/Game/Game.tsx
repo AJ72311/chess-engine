@@ -9,7 +9,13 @@ import 'odometer/themes/odometer-theme-default.css';
 
 type SquareStyles = Partial<Record<Square, CSSProperties>>;
 
-function Game() {
+function Game({
+    isIlluminated,
+    startupCountdown
+} : {
+    isIlluminated: boolean
+    startupCountdown: number
+}) {
     // create a chess.js instance using ref to maintain game state across renders
     const chessGameRef = useRef(new Chess());
     const chessGame = chessGameRef.current;
@@ -34,35 +40,7 @@ function Game() {
 
     // used to animate odometer when going from a book move to a normal one
     const [odometerPositions, setOdometerPositions] = useState<number>(0);
-    const [odometerDepth, setOdometerDepth] = useState<number>(0);
-
-    // used to illuminate board on startup
-    const [isIlluminated, setIsIlluminated] = useState<boolean>(false);
-    const [startupCountdown, setStartupCountdown] = useState<number>(5);
-
-    // illuminate the board on component mount
-    useEffect(() => {
-    if (isIlluminated) return;
-
-    // start a 1-second interval timer
-    const interval = setInterval(() => {
-            setStartupCountdown(prev => {
-                // when the countdown reaches 1, the next tick will be 0.
-                if (prev <= 1) {
-                    clearInterval(interval); 
-
-                    setIsIlluminated(true);
-                    document.body.classList.add('illuminated');
-
-                    return 0; 
-                }
-                return prev - 1; 
-            });
-        }, 1000);
-
-        // Cleanup: clear the interval if the component unmounts
-        return () => clearInterval(interval);
-    }, [isIlluminated]);
+    const [odometerDepth, setOdometerDepth] = useState<number>(0);   
 
     // briefly set odometer values to 0 to ensure animation when transitioning from "Book Move" string
     const wasBookMoveRef = useRef<boolean>(false);
@@ -425,12 +403,14 @@ function Game() {
     return (
         <div className={styles.container}>
             <div className={styles.chessboardContainer}>
-                <StatusLines 
-                    gameOver={gameOver}
-                    isLoading={isLoading}
-                    isIlluminated={isIlluminated}
-                    countdown={startupCountdown > 0 ? startupCountdown : countdown}
-                />
+                <div className={`${styles.statusWrapper} ${isIlluminated ? styles.illuminated : ''}`}>
+                    <StatusLines 
+                        gameOver={gameOver}
+                        isLoading={isLoading}
+                        isIlluminated={isIlluminated}
+                        countdown={startupCountdown > 0 ? startupCountdown : countdown}
+                    />
+                </div>
                 <div className={`${styles.engineInfo} ${isIlluminated ? styles.illuminated : ''}`}>
                     {/* positions explored and depth reached stats */}
                     <div className={styles.engineStats}>

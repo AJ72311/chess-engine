@@ -61,7 +61,6 @@ const ENGINE_MESSAGES = [
     'Trying to distract opponent... beep boop!',
     'Auditing knight hops for tax purposes...',
     "Assessing opponent's aura...",
-    'Psst, hey! Google "en passant" ;)',
 ];
 
 function useRotatingMessage(active: boolean, intervalMs = 1500) {

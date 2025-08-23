@@ -72,7 +72,7 @@
 
 .countdown {
     text-align: center;
-    color: white;
+    color: #e6e6e6;
     font-size: 22px;
     font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
     display: flex;
@@ -128,4 +128,10 @@
 
 .message {
   font-style: italic;
+  color: #e6e6e6;
+  transition: color 1.5s ease;
+}
+
+.illuminated .countdown, .illuminated .message {
+    color: white;
 }
