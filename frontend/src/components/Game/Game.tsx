@@ -451,8 +451,8 @@ function Game({
                     <Chessboard 
                         position={boardPosition}
                         onPieceDrop={onDrop}
-                        onSquareClick={isLoading ? undefined : onSqrClick} // only make moves if not loading
-                        arePiecesDraggable={!isLoading} // can only drag pieces when not loading
+                        onSquareClick={(isLoading || !isIlluminated) ? undefined : onSqrClick}
+                        arePiecesDraggable={!isLoading && isIlluminated}
                         customSquareStyles={{
                             ...optionSquares,
                             ...checkHighlight,

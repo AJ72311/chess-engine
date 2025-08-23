@@ -33,6 +33,7 @@ function App() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`${styles.githubLink} ${isIlluminated ? styles.illuminated : ''}`}
+                data-tooltip="Check out the repo!"
             >
                 <img src={GithubLogo} alt="GitHub Logo" className={styles.githubLogo} />
             </a>
