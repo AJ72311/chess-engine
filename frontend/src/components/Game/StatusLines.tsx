@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import styles from './Game.module.css';
-import cogUrl from '../../assets/cog.svg?url'
+import cogUrl from '../../assets/cog.svg?url';
 
 const ENGINE_MESSAGES = [
     'Applying futility pruning...',
@@ -61,6 +61,7 @@ const ENGINE_MESSAGES = [
     'Trying to distract opponent... beep boop!',
     'Auditing knight hops for tax purposes...',
     "Assessing opponent's aura...",
+    'I compute, therefore I am!',
 ];
 
 function useRotatingMessage(active: boolean, intervalMs = 1500) {
@@ -114,7 +115,7 @@ export function StatusLines({
         ? isLoading
             ? `${engineMessage}`
             : 'Your turn!'
-        : 'Engine is waking up...'
+        : 'Quieceros is waking up...'
 
     return (
         <div className={styles.countdown} aria-live="polite">
