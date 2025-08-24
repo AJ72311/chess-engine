@@ -1,0 +1,120 @@
+.appContainer {
+    position: relative;
+}
+
+@keyframes fadeInLogo {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 0.4;
+    }
+}
+
+@keyframes twinkle {
+    0%, 3%, 6%, 9%, 100% {
+        opacity: 0.4;
+        transform: scale(1);
+    }
+    1.5%, 4.5%, 7.5% {
+        opacity: 0.8;
+        transform: scale(1.1);
+    }
+}
+
+.iconsContainer {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.iconLink {
+    display: block;
+    position: relative; 
+    margin-bottom: 15px; 
+}
+
+.icon {
+    width: 45px; 
+    height: auto; 
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out, filter 0.1s ease-in-out;
+}
+
+.iconLink.illuminated .icon {
+    animation: fadeInLogo 1.5s forwards, 
+               twinkle 30s 1.5s infinite;
+}
+
+.iconLink:hover .icon {
+    animation-play-state: paused;
+    opacity: 1 !important;
+}
+
+.engineIconLink:hover .icon {
+    filter: drop-shadow(0 0 8px #216e3c);
+}
+
+.engineIconLink {
+    cursor: default;
+}
+
+.githubIconLink:hover .icon {
+    filter: drop-shadow(0 0 1px white);
+}
+
+.iconLink[data-tooltip]::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 50%;
+    right: 100%; 
+    transform: translateY(-50%) translateX(-22px); 
+    
+    background-color: #333;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none; 
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
+.engineIconLink[data-tooltip]::before {
+    white-space: normal; 
+    width: 405px; 
+}
+
+.githubIconLink[data-tooltip]::before {
+    white-space: nowrap; 
+    width: max-content; 
+}
+
+.iconLink[data-tooltip]::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 100%; 
+    transform: translateY(-50%) translateX(-10px); 
+    
+    border-width: 6px;
+    border-style: solid;
+    border-color: transparent transparent transparent #333; 
+    
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
+.iconLink[data-tooltip]:hover::before,
+.iconLink[data-tooltip]:hover::after {
+    opacity: 1 !important;
+    visibility: visible;
+}
