@@ -22,33 +22,52 @@
     }
 }
 
-.githubLink {
+.iconsContainer {
     position: absolute;
     top: 20px;
     right: 20px;
-    z-index: 1000; 
-    display: block;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
 }
 
-.githubLogo {
-    width: 40px; 
+.iconLink {
+    display: block;
+    position: relative; 
+    margin-bottom: 15px; 
+}
+
+.icon {
+    width: 45px; 
     height: auto; 
     opacity: 0;
-    transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+    transition: opacity 0.3s ease-in-out, filter 0.1s ease-in-out;
 }
 
-.githubLink.illuminated .githubLogo {
+.iconLink.illuminated .icon {
     animation: fadeInLogo 1.5s forwards, 
                twinkle 30s 1.5s infinite;
 }
 
-.githubLink:hover .githubLogo {
+.iconLink:hover .icon {
     animation-play-state: paused;
     opacity: 1 !important;
-    transform: scale(1); 
 }
 
-.githubLink[data-tooltip]::before {
+.engineIconLink:hover .icon {
+    filter: drop-shadow(0 0 8px #216e3c);
+}
+
+.engineIconLink {
+    cursor: default;
+}
+
+.githubIconLink:hover .icon {
+    filter: drop-shadow(0 0 1px white);
+}
+
+.iconLink[data-tooltip]::before {
     content: attr(data-tooltip);
     position: absolute;
     top: 50%;
@@ -59,8 +78,7 @@
     color: #fff;
     padding: 8px 12px;
     border-radius: 6px;
-    font-size: 14px;
-    white-space: nowrap; 
+    font-size: 12px;
 
     opacity: 0;
     visibility: hidden;
@@ -68,7 +86,17 @@
     transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
 }
 
-.githubLink[data-tooltip]::after {
+.engineIconLink[data-tooltip]::before {
+    white-space: normal; 
+    width: 405px; 
+}
+
+.githubIconLink[data-tooltip]::before {
+    white-space: nowrap; 
+    width: max-content; 
+}
+
+.iconLink[data-tooltip]::after {
     content: '';
     position: absolute;
     top: 50%;
@@ -85,8 +113,8 @@
     transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
 }
 
-.githubLink[data-tooltip]:hover::before,
-.githubLink[data-tooltip]:hover::after {
+.iconLink[data-tooltip]:hover::before,
+.iconLink[data-tooltip]:hover::after {
     opacity: 1 !important;
     visibility: visible;
 }
