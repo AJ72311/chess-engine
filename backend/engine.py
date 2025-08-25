@@ -17,6 +17,10 @@ MAX_DEPTH = 64 # used to initialize killer table
 # used in MVV-LVA move-ordering, king value as highest b/c we want king captures to be attempted last
 PIECE_VALUES = {'k': 10, 'q': 9, 'r': 5, 'b': 3.3, 'n': 3.2, 'p': 1}   
 
+# used to limit the number of entries in the transposition table (TT) to avoid memory overflow
+# 2^19 = 524,288 entries, using a power of 2 allows lookups using the faster bitwise AND as opposed to modulo
+TT_SIZE = 524288 
+
 # used in history table piece identification
 # outer-index pieces: 0='P', 1='N', 2='B', 3='R', 4='Q', 5='K', 6='p', 7='n', 8='b', 9='r', 10='q', 11='k'
 HISTORY_OUTER_INDICES = {
@@ -52,7 +56,9 @@ class Search:
 
         # TRANSPOSITION TABLE: a hash table of previously encountered positions
         # if position was fully evaluated, skip the branch, otherwise update alpha/beta if it tightens the search window
-        self.transposition_table = {} 
+        self.transposition_table = [None] * TT_SIZE
+        self.tt_size = TT_SIZE
+        self.search_cycle = 0  # used in TT replacement strategy to allow prioritization of newer entries
 
     # MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
     def score_move(self, move, depth, hash_move=None):
@@ -97,6 +103,7 @@ class Search:
         
         # if no book move found, proceed with normal search
         start_time = time.time()
+        self.search_cycle += 1  # nodes from higher search cycles are prioritized during a TT collision
         self.nodes_searched = 0
         last_completed_depth = 0
         final_best_move = None
@@ -260,7 +267,6 @@ class Search:
             return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
         
         # RECURSIVE CASE: 
-
         # futility pruning setup
         futility_enabled = False
         static_eval = 0
@@ -271,31 +277,36 @@ class Search:
         original_alpha = alpha
         original_beta = beta
 
-        # before searching, check transposition table for previous encounters of this position
-        hash_move = None    # the strongest move to be retrieved from the transposition table for precise move-ordering 
+        # before searching, perform a TT lookup
         position_hash = current_position.zobrist_hash
-        if position_hash in transposition_table:
-            entry = transposition_table[position_hash]
-            stored_eval = entry['eval']
-            stored_depth = entry['depth']
-            stored_flag = entry['flag']
-            if 'best_move' in entry:
-                hash_move = entry['best_move']
+        table_index = position_hash & (self.tt_size - 1)
+        tt_entry = self.transposition_table[table_index]
+        hash_move = None
 
-            if stored_depth >= depth:               # only trust evals from depths >= current depth
-                if stored_flag == 'EXACT':          # node was evaluated to the leaves, evaluation is exact
-                    return stored_eval
-                elif stored_flag == 'LOWERBOUND':   # beta cut-off occured
-                    if stored_eval > alpha:         # if stored eval is greater than alpha, update alpha to it
-                        alpha = stored_eval
-                elif stored_flag == 'UPPERBOUND':   # alpha was never improved
-                    if stored_eval < beta:          # if stored eval is lower than beta, update beta to it
-                        beta = stored_eval
-                    
-                if alpha >= beta:                   # if updated alpha/beta vals now meet the pruning condition
-                    return stored_eval
+        # if an entry is found, check hash to ensure it's not from a different position (via collisions)
+        if tt_entry and tt_entry['hash'] == position_hash:
+            # only use cached data from deeper or equivalent searches
+            if tt_entry['depth'] >= depth: 
+                stored_eval = tt_entry['eval']
+                stored_flag = tt_entry['flag']
 
-        # if transposition table didn't contain position, or didn't sufficiently tighten alpha/beta window, proceed
+                # use cached evaluation to either narrow alpha-beta window or return a score directly
+                if stored_flag == 'EXACT':
+                    return stored_eval
+                elif stored_flag == 'LOWERBOUND':
+                    alpha = max(alpha, stored_eval)
+                elif stored_flag == 'UPPERBOUND':
+                    beta = min(beta, stored_eval)
+
+                # if search window has now met the pruning condition -> prune this branch
+                if alpha >= beta:
+                    return stored_eval
+                
+            # retrieve the hash move regardless of depth
+            if 'best_move' in tt_entry:
+                hash_move = tt_entry['best_move']
+
+        # if TT didn't allow for an early return, proceed with the core search
         # sort legal moves based on move-ordering score in descending order
         # sorting priority: hash move -> captures w/ MVV-LVA -> killer moves -> history table score
         legal_moves.sort(key=lambda move: self.score_move(move, depth, hash_move), reverse=True)
@@ -387,30 +398,44 @@ class Search:
                         history_table[pc_type_index][dest] += depth * depth
                     break
 
-            # after search completion, update transposition table
-            if max_eval <= original_alpha:      
-                flag = 'UPPERBOUND'
-                max_eval = original_alpha
-            elif max_eval >= original_beta:              
-                flag = 'LOWERBOUND'
-                max_eval = original_beta
-            else:                               
-                flag = 'EXACT'
-            
-            # create new entry / update existing entry in transposition table
-            old = transposition_table.get(position_hash)
-            if (not old) or (depth >= old['depth']): # only write to TT if at deeper iteration than existing entry
-                entry = {
-                    'eval': max_eval,
+            # after search completion, write results to transposition table
+            final_eval = max_eval
+            flag = ''
+            if final_eval >= beta:              # search failed-high -> beta cutoff
+                flag = 'LOWERBOUND'             # this node's true evaluation is at least final_eval
+            elif final_eval <= original_alpha:  # search failed-low -> could not raise alpha
+                flag = 'UPPERBOUND'             # this node's true evaluation is at most final_eval
+            else:
+                flag = 'EXACT'                  # final_score was within alpha-beta bounds
+
+            # TT replacement strategy
+            should_write = False
+            if tt_entry is None:  
+                # always write to empty slots
+                should_write = True     
+            elif tt_entry['age'] < self.search_cycle:
+                # existing entry is old, override it
+                should_write = True    
+            elif depth >= tt_entry['depth']:
+                # existing entry is from an equal or shallower depth, override it
+                should_write = True
+
+            if should_write:
+                new_entry = {
+                    'hash': position_hash,
+                    'eval': final_eval,
                     'depth': depth,
                     'flag': flag,
+                    'age': self.search_cycle,
                 }
-                if flag == 'EXACT': # only store a hash move for move-ordering if evaluation was exact
-                    entry['best_move'] = best_move
+                
+                # only store a hash move if the evaluation was exact
+                if flag == 'EXACT' and best_move:
+                    new_entry['best_move'] = best_move
 
-                transposition_table[position_hash] = entry
+                self.transposition_table[table_index] = new_entry
 
-            return max_eval
+            return final_eval
 
         else: # black to move
             min_eval = INFINITY
@@ -500,30 +525,44 @@ class Search:
                         history_table[pc_type_index][dest] += depth * depth
                     break
             
-            # after search completion, update transposition table
-            if min_eval <= original_alpha:      
-                flag = 'UPPERBOUND'
-                min_eval = original_alpha
-            elif min_eval >= original_beta:              
-                flag = 'LOWERBOUND'
-                min_eval = original_beta
-            else:                               
-                flag = 'EXACT'
+            # after search completion, write results to transposition table
+            final_eval = min_eval
+            flag = ''
+            if final_eval <= alpha:                 # search failed-low -> alpha cutoff
+                flag = 'UPPERBOUND'                 # this node's true evaluation is at most final_eval
+            elif final_eval >= original_beta:       # search failed-high -> could not lower beta
+                flag = 'LOWERBOUND'                 # this node's true evaluation is at least final_eval
+            else:
+                flag = 'EXACT'                      # final score was within alpha-beta bounds
 
-            # create new entry / update existing entry in transposition table
-            old = transposition_table.get(position_hash)
-            if (not old) or (depth >= old['depth']): # only write to TT if at deeper iteration than existing entry
-                entry = {
-                    'eval': min_eval,
+            # TT replacement strategy
+            should_write = False
+            if tt_entry is None:
+                # always write to empty slots
+                should_write = True
+            elif tt_entry['age'] < self.search_cycle:
+                # existing entry is old, override it
+                should_write = True
+            elif depth >= tt_entry['depth']:
+                # existing entry is from an equal or shallower depth, override it
+                should_write = True
+
+            if should_write:
+                new_entry = {
+                    'hash': position_hash,
+                    'eval': final_eval,
                     'depth': depth,
                     'flag': flag,
+                    'age': self.search_cycle,
                 }
-                if flag == 'EXACT': # only store a hash move for move-ordering if evaluation was exact
-                    entry['best_move'] = best_move
 
-                transposition_table[position_hash] = entry
+                # only store a hash move if the evaluation was exact
+                if flag == 'EXACT' and best_move:
+                    new_entry['best_move'] = best_move
+
+                self.transposition_table[table_index] = new_entry
             
-            return min_eval
+            return final_eval
 
     # extends search at minimax leaf nodes to mitigate the 'horizon effect', only considers captures / check escapes
     # hard coded depth limit of 8 to lockdown any runaway recursions
