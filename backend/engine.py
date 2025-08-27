@@ -18,8 +18,8 @@ MAX_DEPTH = 64 # used to initialize killer table
 PIECE_VALUES = {'k': 10, 'q': 9, 'r': 5, 'b': 3.3, 'n': 3.2, 'p': 1}   
 
 # used to limit the number of entries in the transposition table (TT) to avoid memory overflow
-# 2^19 = 524,288 entries, using a power of 2 allows lookups using the faster bitwise AND as opposed to modulo
-TT_SIZE = 524288 
+# 2^18 = 262,144 entries, using a power of 2 allows lookups using the faster bitwise AND as opposed to modulo
+TT_SIZE = 262144 
 
 # used in history table piece identification
 # outer-index pieces: 0='P', 1='N', 2='B', 3='R', 4='Q', 5='K', 6='p', 7='n', 8='b', 9='r', 10='q', 11='k'
