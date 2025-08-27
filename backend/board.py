@@ -454,6 +454,10 @@ class Board:
         
         return False
     
+    # calculates the total number of pieces on the board, this is used to decide when to probe endgame tablebases
+    def piece_count(self):
+        return sum(len(pieces) for pieces in self.piece_lists.values())
+    
 # acts as a "time capsule", capturing a game state snapshot for complete move execution and reversal
 # used by generate_moves() during move validation and minimax() during game tree search
 class Move:

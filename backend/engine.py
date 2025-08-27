@@ -4,9 +4,10 @@ from evaluation import evaluate_position
 from move_generator import generate_moves
 import time
 
-# for opening book
+# for opening book and syzygy tablebases
 import chess
 import chess.polyglot
+import chess.syzygy
 from utils import board_to_fen, ALGEBRAIC_TO_INDEX
 from utils import parse_user_move
 
@@ -34,7 +35,6 @@ DELTA = 100
 # margins for futility pruning, indexed by remaining depth
 FUTILITY_MARGINS = [0, 100, 300]
 
-# the Search class contains minimax's wrapper function search_root(), this is the algorithm for exploring the game tree
 class Search:
     class TimeUpError(Exception):
         # Exception raised when the time limit for a search is exceeded
@@ -59,6 +59,14 @@ class Search:
         self.transposition_table = [None] * TT_SIZE
         self.tt_size = TT_SIZE
         self.search_cycle = 0  # used in TT replacement strategy to allow prioritization of newer entries
+
+        # initialize the Syzygy tablebase reader
+        self.tablebase = None
+        try:
+            self.tablebase = chess.syzygy.open_tablebase('syzygy-tables')
+            print('Syzygy tablebases loaded successfully')
+        except FileNotFoundError:
+            print('Warning: Syzygy tablebase folder "syzygy-tables" not found, proceeding without them...')
 
     # MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
     def score_move(self, move, depth, hash_move=None):
@@ -230,6 +238,37 @@ class Search:
 
     # recursive game search, minimax + alpha-beta pruning, initiated by search_root()
     def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time):
+        # before starting the search, perform the Syzygy tablebase probe if applicable
+        if self.tablebase is not None and current_position.piece_count() <= 5:
+            fen = board_to_fen(current_position)
+            board_syzygy = chess.Board(fen)
+
+            try:
+                # probe the WDL value for the position
+                dtz = self.tablebase.probe_dtz(board_syzygy)
+
+                if dtz != 0: # dtm is 0 for draws
+                    # assign a very high score, but less than mate
+                    TB_WIN_SCORE = 50000
+
+                    eval_score = 0
+                    if dtz > 0:     # forced win for side to move
+                        eval_score = TB_WIN_SCORE - dtz
+                    elif dtz < 0:   # forced loss for side to move
+                        eval_score = -TB_WIN_SCORE - dtz
+                    # all other wdl scores are treated as a draw (ie 0)
+
+                    # wdl score is from current player's perspective, but minimax() always uses white's perspective
+                    # if it's black's turn, we must flip the score
+                    if current_position.color_to_play == 'black':
+                        eval_score = -eval_score
+
+                    # return the perfect evaluation, skipping the search
+                    return eval_score
+            
+            except KeyError:
+                pass
+
         # check if time limit exceeded before searching
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
