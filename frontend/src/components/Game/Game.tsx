@@ -17,7 +17,7 @@ function Game({
     startupCountdown: number
 }) {
     // create a chess.js instance using ref to maintain game state across renders
-    const chessGameRef = useRef(new Chess());
+    const chessGameRef = useRef(new Chess('8/4ppkp/6p1/8/8/7p/1r6/5Kr1 w - - 0 1'));
     const chessGame = chessGameRef.current;
 
     // track current position FEN in state to trigger re-renders

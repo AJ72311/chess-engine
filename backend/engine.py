@@ -8,7 +8,7 @@ import time
 import chess
 import chess.polyglot
 import chess.syzygy
-from utils import board_to_fen, ALGEBRAIC_TO_INDEX
+from utils import board_to_fen, move_to_algebraic
 from utils import parse_user_move
 
 # ----------------------------------- GLOBAL CONSTANTS -----------------------------------
@@ -34,6 +34,9 @@ DELTA = 100
 
 # margins for futility pruning, indexed by remaining depth
 FUTILITY_MARGINS = [0, 100, 300]
+
+# a constant large number to indicate an endgame tablebase win/loss
+TB_SCORE = 90000
 
 class Search:
     class TimeUpError(Exception):
@@ -61,12 +64,9 @@ class Search:
         self.search_cycle = 0  # used in TT replacement strategy to allow prioritization of newer entries
 
         # initialize the Syzygy tablebase reader
-        self.tablebase = None
-        try:
-            self.tablebase = chess.syzygy.open_tablebase('syzygy-tables')
-            print('Syzygy tablebases loaded successfully')
-        except FileNotFoundError:
-            print('Warning: Syzygy tablebase folder "syzygy-tables" not found, proceeding without them...')
+        self.tablebase = chess.syzygy.Tablebase(max_fds=120)
+        files_loaded = self.tablebase.add_directory('syzygy-tables')
+        print(f"Loaded {files_loaded} Syzygy files from 'syzygy-tables'")
 
     # MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
     def score_move(self, move, depth, hash_move=None):
@@ -84,7 +84,7 @@ class Search:
         else:                                               # last priority, use history table score 
             # determine moving piece's history-table index 
             pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
-            return self.history_table[pc_type_index][move.destination_index]    
+            return self.history_table[pc_type_index][move.destination_index]  
 
     # iterative deepening wrapper for search_root
     def find_best_move(self, root_node, color_to_play, time_limit=5):
@@ -115,6 +115,12 @@ class Search:
         self.nodes_searched = 0
         last_completed_depth = 0
         final_best_move = None
+
+        # reset killer table and decay history table
+        self.killer_table = [[None, None] for _ in range(MAX_DEPTH + 1)]
+        for piece_type in range(12):
+            for square in range(120):
+                self.history_table[piece_type][square] //= 2    # divide all values by 2
 
         # use a try/catch block to catch TimeUp errors
         try:
@@ -164,9 +170,9 @@ class Search:
 
     # wrapper function for minimax, returns the move with the most favorable evaluation for the provided color_to_play
     def search_root(
-            self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
-            depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
-        ):    
+        self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
+        depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
+    ):    
         # SET UP INITIAL MINIMAX CALL
         legal_moves, _ = generate_moves(root_node) # all legal moves
         best_move = None
@@ -238,37 +244,6 @@ class Search:
 
     # recursive game search, minimax + alpha-beta pruning, initiated by search_root()
     def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time):
-        # before starting the search, perform the Syzygy tablebase probe if applicable
-        if self.tablebase is not None and current_position.piece_count() <= 5:
-            fen = board_to_fen(current_position)
-            board_syzygy = chess.Board(fen)
-
-            try:
-                # probe the WDL value for the position
-                dtz = self.tablebase.probe_dtz(board_syzygy)
-
-                if dtz != 0: # dtm is 0 for draws
-                    # assign a very high score, but less than mate
-                    TB_WIN_SCORE = 50000
-
-                    eval_score = 0
-                    if dtz > 0:     # forced win for side to move
-                        eval_score = TB_WIN_SCORE - dtz
-                    elif dtz < 0:   # forced loss for side to move
-                        eval_score = -TB_WIN_SCORE - dtz
-                    # all other wdl scores are treated as a draw (ie 0)
-
-                    # wdl score is from current player's perspective, but minimax() always uses white's perspective
-                    # if it's black's turn, we must flip the score
-                    if current_position.color_to_play == 'black':
-                        eval_score = -eval_score
-
-                    # return the perfect evaluation, skipping the search
-                    return eval_score
-            
-            except KeyError:
-                pass
-
         # check if time limit exceeded before searching
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
@@ -277,16 +252,15 @@ class Search:
 
         # BASE CASE 1: threefold repetitions
         if current_position.is_repetition():
-            return 0 # draw score
+            return 0
 
         history_table = self.history_table
         killer_table = self.killer_table
-        transposition_table = self.transposition_table
 
         # generate all legal moves and count the number of checks in the position
         legal_moves, check_count = generate_moves(current_position) # all legal moves
 
-        # BASE CASE 2: checkmate, stalemate, fifty move rule, or depth = 0
+        # BASE CASE 2: checkmate, stalemate, fifty move rule
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, base case #1: it's checkmate
                 if current_position.color_to_play == 'white':
@@ -300,7 +274,43 @@ class Search:
         # check for fifty move rule draws
         if current_position.fifty_move_criteria_met():
             return 0 # draw score
-            
+        
+        # ENDGAME TABLE-BASE PROBE
+        if current_position.piece_count() <= 5:
+            py_chess_board = chess.Board(board_to_fen(current_position))
+
+            try:
+                wdl = self.tablebase.probe_wdl(py_chess_board)
+                if abs(wdl) == 1: wdl = 0  # treat blessed/cursed wins as draws
+
+                # if the position is a decisive win or loss...
+                if wdl != 0:
+                    dtz = self.tablebase.probe_dtz(py_chess_board)
+                    
+                    # add small bonus to irreversible moves (pawn advances & captures) to favor them when breaking ties
+                    bonus = 0
+                    if current_position.half_move == 0:
+                        bonus = 50 
+
+                    # calculate the final score, incorporating the bonus
+                    if color_to_play == 'white':
+                        if wdl == 2:     # win for white
+                            return (TB_SCORE - dtz) + bonus
+                        elif wdl == -2:  # loss for white
+                            return (-TB_SCORE - dtz) - bonus
+                    else:  # Black to move
+                        if wdl == 2:     # win for black
+                            return (-TB_SCORE + dtz) - bonus
+                        elif wdl == -2:  # loss for black
+                            return (TB_SCORE + dtz) + bonus
+
+                # if wdl is 0, it's a draw
+                elif wdl == 0:
+                    return 0
+                    
+            except (IndexError, KeyError):
+                pass  # Fall through to normal search if probe fails
+
         if depth == 0:                      # if depth == 0, base case #3: max depth reached
             # enter quiescence routine
             return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
