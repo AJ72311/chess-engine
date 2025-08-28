@@ -642,9 +642,9 @@ class Search:
             elif check_count == 0:          # if no checks, it's stalemate
                 return 0                    # stalemate eval
         
-        # only filter out non-captures if no checks... if a king is in check, we must evaluate all legal moves
+        # if there are no checks, filter out moves that are not captures or promotions
         if check_count == 0:
-            legal_moves = [move for move in legal_moves if move.piece_captured]
+            legal_moves = [move for move in legal_moves if move.piece_captured or move.promotion_piece]
             if not legal_moves: # if there are no legal non-captures, return the final evaluation
                 return evaluate_position(current_position)
 
@@ -675,7 +675,7 @@ class Search:
             max_eval = stand_pat_eval
             for move in legal_moves:
                 # first run delta pruning check
-                if check_count == 0: # cannot delta prune while in check
+                if check_count == 0 and not move.promotion_piece: # cannot delta prune while in check
                     attacker_value = PIECE_VALUES[move.moving_piece.lower()]
                     victim_value = PIECE_VALUES[move.piece_captured.lower()]
                     material_gain = (victim_value - attacker_value) * 100 # multiply by 100 for centipawn eval
@@ -703,7 +703,7 @@ class Search:
             min_eval = stand_pat_eval
             for move in legal_moves:
                 # first run delta pruning check
-                if check_count == 0: # cannot delta prune while in check
+                if check_count == 0 and not move.promotion_piece: # cannot delta prune while in check
                     attacker_value = PIECE_VALUES[move.moving_piece.lower()]
                     victim_value = PIECE_VALUES[move.piece_captured.lower()]
                     material_gain = (victim_value - attacker_value) * 100 # multiply by 100 for centipawn eval
