@@ -35,7 +35,7 @@ DELTA = 100
 # margins for futility pruning, indexed by remaining depth
 FUTILITY_MARGINS = [0, 100, 300]
 
-# used to disable futility pruning and LMR in overwhelmingly winning endgames to prioritize finding mate
+# used to disable futility in winning positions to prevent excessive pruning
 WIN_SCORE = 500  # a rook's value
 
 # a constant large number to indicate an endgame tablebase win/loss
@@ -324,7 +324,15 @@ class Search:
         static_eval = 0
         if depth <= 2 and check_count == 0: # only allow futility pruning if no checks and depth is below 3
             static_eval = evaluate_position(current_position)
-            
+
+            won_position = False
+            # to prevent aggressive over-pruning in a won position, disable futility when above the win threshold
+            if (
+                (color_to_play == 'white' and static_eval > WIN_SCORE) 
+                or (color_to_play == 'black' and static_eval < -WIN_SCORE)
+            ):
+                won_position = True
+
             # count material
             material_count = 0
             for piece in ['Q', 'R', 'N', 'B', 'q', 'r', 'n', 'b']:
@@ -336,7 +344,7 @@ class Search:
                     material_count += len(current_position.piece_lists[piece])
 
             # disable futility pruning near the end of the game
-            if material_count > 4:
+            if material_count > 4 and not won_position:
                 futility_enabled = True
 
         original_alpha = alpha
@@ -503,10 +511,8 @@ class Search:
                     'depth': depth,
                     'flag': flag,
                     'age': self.search_cycle,
-                }
-                
-                # only store a hash move if the evaluation was exact
-                if flag == 'EXACT' and best_move:
+                }                
+                if best_move:
                     new_entry['best_move'] = best_move
 
                 self.transposition_table[table_index] = new_entry
@@ -641,9 +647,7 @@ class Search:
                     'flag': flag,
                     'age': self.search_cycle,
                 }
-
-                # only store a hash move if the evaluation was exact
-                if flag == 'EXACT' and best_move:
+                if best_move:
                     new_entry['best_move'] = best_move
 
                 self.transposition_table[table_index] = new_entry
