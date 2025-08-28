@@ -35,6 +35,9 @@ DELTA = 100
 # margins for futility pruning, indexed by remaining depth
 FUTILITY_MARGINS = [0, 100, 300]
 
+# used to disable futility pruning and LMR in overwhelmingly winning endgames to prioritize finding mate
+WIN_SCORE = 500  # a rook's value
+
 # a constant large number to indicate an endgame tablebase win/loss
 TB_SCORE = 90000
 
@@ -320,8 +323,21 @@ class Search:
         futility_enabled = False
         static_eval = 0
         if depth <= 2 and check_count == 0: # only allow futility pruning if no checks and depth is below 3
-            futility_enabled = True
             static_eval = evaluate_position(current_position)
+            
+            # count material
+            material_count = 0
+            for piece in ['Q', 'R', 'N', 'B', 'q', 'r', 'n', 'b']:
+                if piece.lower() == 'q':
+                    material_count += len(current_position.piece_lists[piece]) * 4
+                elif piece.lower() == 'r':
+                    material_count += len(current_position.piece_lists[piece]) * 2
+                elif piece.lower() == 'n' or piece.lower() == 'b':
+                    material_count += len(current_position.piece_lists[piece])
+
+            # disable futility pruning near the end of the game
+            if material_count > 4:
+                futility_enabled = True
 
         original_alpha = alpha
         original_beta = beta
@@ -365,9 +381,19 @@ class Search:
             best_move = None         # track best move to store in TT for move-ordering
 
             for move_index, move in enumerate(legal_moves):
-                # first, check if futility pruning applies
+                # don't use LMR or futility on pawn pushes at or above the 6th rank
+                is_dangerous_pawn_push = (
+                    move.moving_piece == 'P' and 
+                    move.destination_index <= 48
+                )
+
+                # check if futility applies
                 if futility_enabled:
-                    if not move.piece_captured and not move.promotion_piece: # futility pruning only for quiet moves
+                    if (
+                        (not move.piece_captured) 
+                        and (not move.promotion_piece)
+                        and (not is_dangerous_pawn_push)
+                    ):
                         margin = FUTILITY_MARGINS[depth]
 
                         # if current eval + safety margin still can't raise alpha
@@ -399,6 +425,7 @@ class Search:
                         and (not move.piece_captured) 
                         and (not move.promotion_piece)
                         and (check_count == 0)
+                        and (not is_dangerous_pawn_push)
                     ):
                         reduction = 1   # reduce depth for late moves
 
@@ -491,9 +518,19 @@ class Search:
             best_move = None     # track the best move to store in TT for move-ordering
 
             for move_index, move in enumerate(legal_moves):
-                # first, check if futility pruning applies
+                # don't use LMR or futility on pawn pushes at or below the 3rd rank
+                is_dangerous_pawn_push = (
+                    move.moving_piece == 'p' and
+                    move.destination_index >= 71
+                )
+                 
+                # check if futility pruning applies
                 if futility_enabled:
-                    if not move.piece_captured and not move.promotion_piece: # futility pruning only for quiet moves
+                    if (
+                        (not move.piece_captured) 
+                        and (not move.promotion_piece)
+                        and (not is_dangerous_pawn_push)
+                    ):
                         margin = FUTILITY_MARGINS[depth]
 
                         # if current eval - safety margin still can't lower beta
@@ -519,13 +556,13 @@ class Search:
                     reduction = 0   # used in late-move reductions
                     
                     # LMR conditions
-                    # LMR conditions
                     if (
                         (depth >= 3)
                         and (move_index >= 3) 
                         and (not move.piece_captured) 
                         and (not move.promotion_piece)
                         and (check_count == 0)
+                        and (not is_dangerous_pawn_push)
                     ):
                         reduction = 1   # reduce depth for late moves
 

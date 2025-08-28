@@ -1,7 +1,7 @@
 from board import Board
 from engine import Search
 from move_generator import generate_moves
-from utils import board_to_fen, move_to_algebraic, parse_user_move, set_board_from_fen
+from utils import board_to_fen, move_to_algebraic, parse_user_move
 import uuid
 import time
 
@@ -11,7 +11,6 @@ ENGINE_THINK_TIME = 6   # engine think time capped at 6 seconds
 # creates a new active session and initializes the Board and Search instances
 def new_game(player_move: str | None):
     board = Board()
-    set_board_from_fen(board, '8/4ppkp/6p1/8/8/7p/1r6/5Kr1 w - - 0 1')
     search = Search(depth=64)
     game_id = str(uuid.uuid4())
 
