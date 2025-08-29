@@ -201,20 +201,21 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                score = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time)
+                score = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time, ply=0)
                 root_node.unmake_move(move)
 
                 # START: ADDED DEBUG BLOCK FOR WHITE
                 debug_info = ""
                 if root_node.piece_count() <= 5:
                     try:
-                        root_node.make_move(move)
-                        child_board = chess.Board(board_to_fen(root_node))
-                        wdl = self.tablebase.probe_wdl(child_board)
-                        dtz = self.tablebase.probe_dtz(child_board)
-                        wdl_map = {2:"Win", 1:"Blessed Win", 0:"Draw", -1:"Cursed Loss", -2:"Loss"}
-                        debug_info = f" | TB Info: WDL={wdl_map.get(wdl, wdl)}, DTZ={dtz}"
-                        root_node.unmake_move(move)
+                        # root_node.make_move(move)
+                        # child_board = chess.Board(board_to_fen(root_node))
+                        # wdl = self.tablebase.probe_wdl(child_board)
+                        # dtz = self.tablebase.probe_dtz(child_board)
+                        # wdl_map = {2:"Win", 1:"Blessed Win", 0:"Draw", -1:"Cursed Loss", -2:"Loss"}
+                        # debug_info = f" | TB Info: WDL={wdl_map.get(wdl, wdl)}, DTZ={dtz}"
+                        # root_node.unmake_move(move)
+                        pass
                     except Exception:
                         debug_info = "" # Fail silently if probe fails
                 print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}{debug_info}")
@@ -230,7 +231,7 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                score = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time)
+                score = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time, ply=0)
                 root_node.unmake_move(move)
 
                 # START: ADDED DEBUG BLOCK FOR BLACK
@@ -256,7 +257,7 @@ class Search:
         return best_move
 
     # recursive game search, minimax + alpha-beta pruning, initiated by search_root()
-    def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time):
+    def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time, ply):
         # check if time limit exceeded before searching
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
@@ -277,9 +278,9 @@ class Search:
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, base case #1: it's checkmate
                 if current_position.color_to_play == 'white':
-                    return -99999 - depth   # white is checkmated, favorable eval for black 
+                    return -99999 + ply   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 + depth    # black is checkmated, favorable eval for white
+                    return 99999 - depth    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, base case #2: it's stalemate
                 return 0                    # stalemate eval
@@ -290,7 +291,7 @@ class Search:
 
         # if depth == 0, enter quiescence routine
         if depth == 0:
-            return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
+            return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time, ply)
         
         # RECURSIVE CASE: 
         # futility pruning setup
@@ -388,7 +389,8 @@ class Search:
                         'black', 
                         depth - 1, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
                 
                 # 2: null window (alpha, alpha+1) search for all subsequent moves
@@ -416,7 +418,8 @@ class Search:
                         'black', 
                         reduced_depth, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
 
                     # 3: if null window search failed high, re-search with a full window to full depth
@@ -428,7 +431,8 @@ class Search:
                             'black', 
                             depth - 1, 
                             time_limit, 
-                            start_time
+                            start_time,
+                            ply + 1,
                         )
 
                 current_position.unmake_move(move)
@@ -523,7 +527,8 @@ class Search:
                         'white', 
                         depth - 1, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
 
                 # 2: null window (beta - 1, beta) search for all subsequent moves
@@ -551,7 +556,8 @@ class Search:
                         'white', 
                         reduced_depth, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
 
                     # 3: if null window search failed low, re-search with a full window to full depth
@@ -563,7 +569,8 @@ class Search:
                             'white', 
                             depth - 1, 
                             time_limit, 
-                            start_time
+                            start_time,
+                            ply + 1,
                         )
 
                 current_position.unmake_move(move)
@@ -627,42 +634,47 @@ class Search:
     # hard coded depth limit of 8 to lockdown any runaway recursions
     def quiescence_search(
         self, current_position, alpha, beta, color_to_play, 
-        time_limit, start_time, q_depth=1, max_depth=8
+        time_limit, start_time, ply, q_depth=1, max_depth=8,
     ):
         # TABLEBASE PROBE
-        if current_position.piece_count() <= 5:
-            try:
-                py_chess_board = chess.Board(board_to_fen(current_position))
-                wdl = self.tablebase.probe_wdl(py_chess_board)
+        # if current_position.piece_count() <= 5:
+        #     try:
+        #         py_chess_board = chess.Board(board_to_fen(current_position))
+        #         wdl = self.tablebase.probe_wdl(py_chess_board)
 
-                # blessed wins/cursed losses are treated as draws for search stability
-                if abs(wdl) == 1:
-                    return 0
+        #         # blessed wins/cursed losses are treated as draws for search stability
+        #         if abs(wdl) == 1:
+        #             return 0
                 
-                # draw
-                if wdl == 0:
-                    return 0
+        #         # draw
+        #         if wdl == 0:
+        #             return 0
 
-                # decisive win/loss
-                dtz = self.tablebase.probe_dtz(py_chess_board)
+        #         # decisive win/loss
+        #         dtz = self.tablebase.probe_dtz(py_chess_board)
+
+        #         progress_bonus = 0
+        #         # a half_move count of 0 means the last move was irreversible (progress was made)
+        #         if current_position.half_move == 0:
+        #             progress_bonus = 50 # small bonus to break ties
                 
-                # calculate score from the perspective of the size to move
-                # a win is positive, a loss is negative
-                if wdl > 0: 
-                    # The faster the win (lower DTZ), the higher the score
-                    score_from_stm_perspective = TB_SCORE - abs(dtz)
-                else: 
-                    # The faster the loss (lower abs(DTZ)), the lower the score
-                    score_from_stm_perspective = -TB_SCORE + abs(dtz)
+        #         # calculate score from the perspective of the size to move
+        #         # a win is positive, a loss is negative
+        #         if wdl > 0: 
+        #             # The faster the win (lower DTZ), the higher the score
+        #             score_from_stm_perspective = TB_SCORE - (abs(dtz) + ply) + progress_bonus
+        #         else: 
+        #             # The faster the loss (lower abs(DTZ)), the lower the score
+        #             score_from_stm_perspective = -TB_SCORE + (abs(dtz) + ply) + progress_bonus
 
-                # convert score to white's perspective for minimax (white=+, black=-)
-                if py_chess_board.turn == chess.BLACK:
-                    return -score_from_stm_perspective
-                else:
-                    return score_from_stm_perspective
+        #         # convert score to white's perspective for minimax (white=+, black=-)
+        #         if py_chess_board.turn == chess.BLACK:
+        #             return -score_from_stm_perspective
+        #         else:
+        #             return score_from_stm_perspective
 
-            except (IndexError, KeyError):
-                pass # Probe failed, fall through to normal quiescence search
+        #     except (IndexError, KeyError):
+        #         pass # Probe failed, fall through to normal quiescence search
         
         self.max_q_depth = max(self.max_q_depth, q_depth)
 
@@ -679,9 +691,9 @@ class Search:
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, it's checkmate
                 if current_position.color_to_play == 'white':
-                    return -99999 + q_depth   # white is checkmated, favorable eval for black 
+                    return -99999 + ply   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 - q_depth    # black is checkmated, favorable eval for white
+                    return 99999 - ply    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, it's stalemate
                 return 0                    # stalemate eval
@@ -731,7 +743,7 @@ class Search:
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
                     current_position, alpha, beta, 'black', 
-                    time_limit, start_time, q_depth+1, max_depth
+                    time_limit, start_time, ply+1, q_depth+1, max_depth
                 )
                 current_position.unmake_move(move)
 
@@ -759,7 +771,7 @@ class Search:
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
                     current_position, alpha, beta, 'white', 
-                    time_limit, start_time, q_depth+1, max_depth
+                    time_limit, start_time, ply+1, q_depth+1, max_depth
                 )
                 current_position.unmake_move(move)
 
