@@ -176,6 +176,8 @@ class Search:
         self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
         depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
     ):    
+        print(f"\n--- Searching at Depth: {depth} ---")
+
         # SET UP INITIAL MINIMAX CALL
         legal_moves, _ = generate_moves(root_node) # all legal moves
         best_move = None
@@ -199,24 +201,28 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                move_eval = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time)
+                score = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time)
                 root_node.unmake_move(move)
-                if (move_eval > best_eval):
-                    best_eval = move_eval
+
+                # START: ADDED DEBUG BLOCK FOR WHITE
+                debug_info = ""
+                if root_node.piece_count() <= 5:
+                    try:
+                        root_node.make_move(move)
+                        child_board = chess.Board(board_to_fen(root_node))
+                        wdl = self.tablebase.probe_wdl(child_board)
+                        dtz = self.tablebase.probe_dtz(child_board)
+                        wdl_map = {2:"Win", 1:"Blessed Win", 0:"Draw", -1:"Cursed Loss", -2:"Loss"}
+                        debug_info = f" | TB Info: WDL={wdl_map.get(wdl, wdl)}, DTZ={dtz}"
+                        root_node.unmake_move(move)
+                    except Exception:
+                        debug_info = "" # Fail silently if probe fails
+                print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}{debug_info}")
+                # END: ADDED DEBUG BLOCK FOR WHITE
+
+                if (score > best_eval):
+                    best_eval = score
                     best_move = move
-
-                alpha = max(alpha, move_eval)
-                if alpha >= beta:       # beta cut-off, update killer and history tables, break
-                    if not move.piece_captured:     # if this was not a capture
-                        # shift over top two killer moves for this depth
-                        killer_table[depth][1] = killer_table[depth][0]
-                        killer_table[depth][0] = move
-
-                        # give a bonus of depth^2 to the this piece's history table destination square
-                        pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
-                        dest = move.destination_index
-                        history_table[pc_type_index][dest] += depth * depth
-                    break
         
         # black to move
         else:
@@ -224,24 +230,28 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                move_eval = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time)
+                score = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time)
                 root_node.unmake_move(move)
-                if (move_eval < best_eval):
-                    best_eval = move_eval
+
+                # START: ADDED DEBUG BLOCK FOR BLACK
+                debug_info = ""
+                if root_node.piece_count() <= 5:
+                    try:
+                        root_node.make_move(move)
+                        child_board = chess.Board(board_to_fen(root_node))
+                        wdl = self.tablebase.probe_wdl(child_board)
+                        dtz = self.tablebase.probe_dtz(child_board)
+                        wdl_map = {2:"Win", 1:"Blessed Win", 0:"Draw", -1:"Cursed Loss", -2:"Loss"}
+                        debug_info = f" | TB Info: WDL={wdl_map.get(wdl, wdl)}, DTZ={dtz}"
+                        root_node.unmake_move(move)
+                    except Exception:
+                        debug_info = "" # Fail silently if probe fails
+                print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}{debug_info}")
+                # END: ADDED DEBUG BLOCK FOR BLACK
+
+                if (score < best_eval):
+                    best_eval = score
                     best_move = move
-
-                beta = min(beta, move_eval)
-                if (beta <= alpha):     # beta cut-off, update killer and history tables, break
-                    if not move.piece_captured:     # if this was not a capture
-                        # shift over top two killer moves for this depth
-                        killer_table[depth][1] = killer_table[depth][0]
-                        killer_table[depth][0] = move
-
-                        # give a bonus of depth^2 to the this piece's history table destination square
-                        pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
-                        dest = move.destination_index
-                        history_table[pc_type_index][dest] += depth * depth
-                    break
         
         return best_move
 
@@ -277,45 +287,9 @@ class Search:
         # check for fifty move rule draws
         if current_position.fifty_move_criteria_met():
             return 0 # draw score
-        
-        # ENDGAME TABLE-BASE PROBE
-        if current_position.piece_count() <= 5:
-            py_chess_board = chess.Board(board_to_fen(current_position))
 
-            try:
-                wdl = self.tablebase.probe_wdl(py_chess_board)
-                if abs(wdl) == 1: wdl = 0  # treat blessed/cursed wins as draws
-
-                # if the position is a decisive win or loss...
-                if wdl != 0:
-                    dtz = self.tablebase.probe_dtz(py_chess_board)
-                    
-                    # add small bonus to irreversible moves (pawn advances & captures) to favor them when breaking ties
-                    bonus = 0
-                    if current_position.half_move == 0:
-                        bonus = 50 
-
-                    # calculate the final score, incorporating the bonus
-                    if color_to_play == 'white':
-                        if wdl == 2:     # win for white
-                            return (TB_SCORE - dtz) + bonus
-                        elif wdl == -2:  # loss for white
-                            return (-TB_SCORE - dtz) - bonus
-                    else:  # Black to move
-                        if wdl == 2:     # win for black
-                            return (-TB_SCORE + dtz) - bonus
-                        elif wdl == -2:  # loss for black
-                            return (TB_SCORE + dtz) + bonus
-
-                # if wdl is 0, it's a draw
-                elif wdl == 0:
-                    return 0
-                    
-            except (IndexError, KeyError):
-                pass  # Fall through to normal search if probe fails
-
-        if depth == 0:                      # if depth == 0, base case #3: max depth reached
-            # enter quiescence routine
+        # if depth == 0, enter quiescence routine
+        if depth == 0:
             return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
         
         # RECURSIVE CASE: 
@@ -325,13 +299,8 @@ class Search:
         if depth <= 2 and check_count == 0: # only allow futility pruning if no checks and depth is below 3
             static_eval = evaluate_position(current_position)
 
-            won_position = False
             # to prevent aggressive over-pruning in a won position, disable futility when above the win threshold
-            if (
-                (color_to_play == 'white' and static_eval > WIN_SCORE) 
-                or (color_to_play == 'black' and static_eval < -WIN_SCORE)
-            ):
-                won_position = True
+            won_position = abs(static_eval) > WIN_SCORE
 
             # count material
             material_count = 0
@@ -660,6 +629,40 @@ class Search:
         self, current_position, alpha, beta, color_to_play, 
         time_limit, start_time, q_depth=1, max_depth=8
     ):
+        # TABLEBASE PROBE
+        if current_position.piece_count() <= 5:
+            try:
+                py_chess_board = chess.Board(board_to_fen(current_position))
+                wdl = self.tablebase.probe_wdl(py_chess_board)
+
+                # blessed wins/cursed losses are treated as draws for search stability
+                if abs(wdl) == 1:
+                    return 0
+                
+                # draw
+                if wdl == 0:
+                    return 0
+
+                # decisive win/loss
+                dtz = self.tablebase.probe_dtz(py_chess_board)
+                
+                # calculate score from the perspective of the size to move
+                # a win is positive, a loss is negative
+                if wdl > 0: 
+                    # The faster the win (lower DTZ), the higher the score
+                    score_from_stm_perspective = TB_SCORE - abs(dtz)
+                else: 
+                    # The faster the loss (lower abs(DTZ)), the lower the score
+                    score_from_stm_perspective = -TB_SCORE + abs(dtz)
+
+                # convert score to white's perspective for minimax (white=+, black=-)
+                if py_chess_board.turn == chess.BLACK:
+                    return -score_from_stm_perspective
+                else:
+                    return score_from_stm_perspective
+
+            except (IndexError, KeyError):
+                pass # Probe failed, fall through to normal quiescence search
         
         self.max_q_depth = max(self.max_q_depth, q_depth)
 
