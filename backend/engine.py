@@ -4,10 +4,9 @@ from evaluation import evaluate_position
 from move_generator import generate_moves
 import time
 
-# for opening book and syzygy tablebases
+# for opening book
 import chess
 import chess.polyglot
-import chess.syzygy
 from utils import board_to_fen, move_to_algebraic
 from utils import parse_user_move
 
@@ -38,9 +37,6 @@ FUTILITY_MARGINS = [0, 100, 300]
 # used to disable futility in winning positions to prevent excessive pruning
 WIN_SCORE = 500  # a rook's value
 
-# a constant large number to indicate an endgame tablebase win/loss
-TB_SCORE = 90000
-
 class Search:
     class TimeUpError(Exception):
         # Exception raised when the time limit for a search is exceeded
@@ -65,11 +61,6 @@ class Search:
         self.transposition_table = [None] * TT_SIZE
         self.tt_size = TT_SIZE
         self.search_cycle = 0  # used in TT replacement strategy to allow prioritization of newer entries
-
-        # initialize the Syzygy tablebase reader
-        self.tablebase = chess.syzygy.Tablebase(max_fds=120)
-        files_loaded = self.tablebase.add_directory('syzygy-tables')
-        print(f"Loaded {files_loaded} Syzygy files from 'syzygy-tables'")
 
     # MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
     def score_move(self, move, depth, hash_move=None):
@@ -176,8 +167,6 @@ class Search:
         self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
         depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
     ):    
-        print(f"\n--- Searching at Depth: {depth} ---")
-
         # SET UP INITIAL MINIMAX CALL
         legal_moves, _ = generate_moves(root_node) # all legal moves
         best_move = None
@@ -204,26 +193,17 @@ class Search:
                 score = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time, ply=0)
                 root_node.unmake_move(move)
 
-                # START: ADDED DEBUG BLOCK FOR WHITE
-                debug_info = ""
-                if root_node.piece_count() <= 5:
-                    try:
-                        # root_node.make_move(move)
-                        # child_board = chess.Board(board_to_fen(root_node))
-                        # wdl = self.tablebase.probe_wdl(child_board)
-                        # dtz = self.tablebase.probe_dtz(child_board)
-                        # wdl_map = {2:"Win", 1:"Blessed Win", 0:"Draw", -1:"Cursed Loss", -2:"Loss"}
-                        # debug_info = f" | TB Info: WDL={wdl_map.get(wdl, wdl)}, DTZ={dtz}"
-                        # root_node.unmake_move(move)
-                        pass
-                    except Exception:
-                        debug_info = "" # Fail silently if probe fails
-                print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}{debug_info}")
-                # END: ADDED DEBUG BLOCK FOR WHITE
+                # START: DEBUG BLOCK FOR WHITE, UNCOMMENT TO DISPLAY DEBUG OUTPUT
+                # print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}")
+                # END: DEBUG BLOCK FOR WHITE
 
                 if (score > best_eval):
                     best_eval = score
                     best_move = move
+
+                alpha = max(alpha, score)
+                if alpha >= beta:
+                    break
         
         # black to move
         else:
@@ -234,25 +214,17 @@ class Search:
                 score = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time, ply=0)
                 root_node.unmake_move(move)
 
-                # START: ADDED DEBUG BLOCK FOR BLACK
-                debug_info = ""
-                if root_node.piece_count() <= 5:
-                    try:
-                        root_node.make_move(move)
-                        child_board = chess.Board(board_to_fen(root_node))
-                        wdl = self.tablebase.probe_wdl(child_board)
-                        dtz = self.tablebase.probe_dtz(child_board)
-                        wdl_map = {2:"Win", 1:"Blessed Win", 0:"Draw", -1:"Cursed Loss", -2:"Loss"}
-                        debug_info = f" | TB Info: WDL={wdl_map.get(wdl, wdl)}, DTZ={dtz}"
-                        root_node.unmake_move(move)
-                    except Exception:
-                        debug_info = "" # Fail silently if probe fails
-                print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}{debug_info}")
-                # END: ADDED DEBUG BLOCK FOR BLACK
+                # START: DEBUG BLOCK FOR BLACK, UNCOMMENT TO DISPLAY DEBUG OUTPUT
+                # print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}")
+                # END: DEBUG BLOCK FOR BLACK
 
                 if (score < best_eval):
                     best_eval = score
                     best_move = move
+
+                beta = min(beta, score)
+                if beta <= alpha: 
+                    break
         
         return best_move
 
@@ -280,7 +252,7 @@ class Search:
                 if current_position.color_to_play == 'white':
                     return -99999 + ply   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 - depth    # black is checkmated, favorable eval for white
+                    return 99999 - ply    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, base case #2: it's stalemate
                 return 0                    # stalemate eval
@@ -635,47 +607,7 @@ class Search:
     def quiescence_search(
         self, current_position, alpha, beta, color_to_play, 
         time_limit, start_time, ply, q_depth=1, max_depth=8,
-    ):
-        # TABLEBASE PROBE
-        # if current_position.piece_count() <= 5:
-        #     try:
-        #         py_chess_board = chess.Board(board_to_fen(current_position))
-        #         wdl = self.tablebase.probe_wdl(py_chess_board)
-
-        #         # blessed wins/cursed losses are treated as draws for search stability
-        #         if abs(wdl) == 1:
-        #             return 0
-                
-        #         # draw
-        #         if wdl == 0:
-        #             return 0
-
-        #         # decisive win/loss
-        #         dtz = self.tablebase.probe_dtz(py_chess_board)
-
-        #         progress_bonus = 0
-        #         # a half_move count of 0 means the last move was irreversible (progress was made)
-        #         if current_position.half_move == 0:
-        #             progress_bonus = 50 # small bonus to break ties
-                
-        #         # calculate score from the perspective of the size to move
-        #         # a win is positive, a loss is negative
-        #         if wdl > 0: 
-        #             # The faster the win (lower DTZ), the higher the score
-        #             score_from_stm_perspective = TB_SCORE - (abs(dtz) + ply) + progress_bonus
-        #         else: 
-        #             # The faster the loss (lower abs(DTZ)), the lower the score
-        #             score_from_stm_perspective = -TB_SCORE + (abs(dtz) + ply) + progress_bonus
-
-        #         # convert score to white's perspective for minimax (white=+, black=-)
-        #         if py_chess_board.turn == chess.BLACK:
-        #             return -score_from_stm_perspective
-        #         else:
-        #             return score_from_stm_perspective
-
-        #     except (IndexError, KeyError):
-        #         pass # Probe failed, fall through to normal quiescence search
-        
+    ):        
         self.max_q_depth = max(self.max_q_depth, q_depth)
 
         # before searching, check if time limit exceeded
@@ -712,11 +644,11 @@ class Search:
         stand_pat_eval = evaluate_position(current_position)
         if color_to_play == 'white':            # white to move
             if stand_pat_eval >= beta:          # fail high, black has a better option
-                return beta
+                return stand_pat_eval
             alpha = max(alpha, stand_pat_eval)  # update alpha if the stand pat eval improves on it
         elif color_to_play == 'black':          # black to move
             if stand_pat_eval <= alpha:         # fail low, white has a better option
-                return alpha 
+                return stand_pat_eval 
             beta = min(beta, stand_pat_eval)    # update beta if the stand pat eval improves on it
             
         # third base case: no captures / check evasion moves available
@@ -751,7 +683,7 @@ class Search:
                 alpha = max(alpha, returned_eval)
 
                 if alpha >= beta:
-                    return beta
+                    return max_eval
                 
             return max_eval
 
@@ -779,7 +711,7 @@ class Search:
                 beta = min(beta, returned_eval)
 
                 if beta <= alpha:
-                    return alpha
+                    return min_eval
                 
             return min_eval
 
