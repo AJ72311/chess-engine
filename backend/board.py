@@ -454,9 +454,23 @@ class Board:
         
         return False
     
+    # calculates the total number of pieces on the board, this is used to decide when to probe endgame tablebases
+    def piece_count(self):
+        return sum(len(pieces) for pieces in self.piece_lists.values())
+    
 # acts as a "time capsule", capturing a game state snapshot for complete move execution and reversal
 # used by generate_moves() during move validation and minimax() during game tree search
 class Move:
+    # used to reduce memory footprint of Move objects being stored in the transposition table
+    __slots__ = [
+        'moving_piece', 'source_index', 'destination_index', 'piece_captured', 
+        'is_en_passant', 'is_castle', 'promotion_piece', 
+        'previous_white_castle_kingside', 'previous_white_castle_queenside',
+        'previous_black_castle_kingside', 'previous_black_castle_queenside',
+        'previous_en_passant_square', 'previous_half_move', 
+        'previous_color_to_play', 'previous_zobrist_hash'
+    ]
+
     def __init__(
             self, position, moving_piece, source_index, destination_index, 
             piece_captured, is_en_passant, is_castle, promotion_piece=None

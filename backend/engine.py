@@ -7,7 +7,7 @@ import time
 # for opening book
 import chess
 import chess.polyglot
-from utils import board_to_fen, ALGEBRAIC_TO_INDEX
+from utils import board_to_fen, move_to_algebraic
 from utils import parse_user_move
 
 # ----------------------------------- GLOBAL CONSTANTS -----------------------------------
@@ -16,6 +16,10 @@ MAX_DEPTH = 64 # used to initialize killer table
 
 # used in MVV-LVA move-ordering, king value as highest b/c we want king captures to be attempted last
 PIECE_VALUES = {'k': 10, 'q': 9, 'r': 5, 'b': 3.3, 'n': 3.2, 'p': 1}   
+
+# used to limit the number of entries in the transposition table (TT) to avoid memory overflow
+# 2^18 = 262,144 entries, using a power of 2 allows lookups using the faster bitwise AND as opposed to modulo
+TT_SIZE = 262144 
 
 # used in history table piece identification
 # outer-index pieces: 0='P', 1='N', 2='B', 3='R', 4='Q', 5='K', 6='p', 7='n', 8='b', 9='r', 10='q', 11='k'
@@ -30,7 +34,9 @@ DELTA = 100
 # margins for futility pruning, indexed by remaining depth
 FUTILITY_MARGINS = [0, 100, 300]
 
-# the Search class contains minimax's wrapper function search_root(), this is the algorithm for exploring the game tree
+# used to disable futility in winning positions to prevent excessive pruning
+WIN_SCORE = 500  # a rook's value
+
 class Search:
     class TimeUpError(Exception):
         # Exception raised when the time limit for a search is exceeded
@@ -52,7 +58,9 @@ class Search:
 
         # TRANSPOSITION TABLE: a hash table of previously encountered positions
         # if position was fully evaluated, skip the branch, otherwise update alpha/beta if it tightens the search window
-        self.transposition_table = {} 
+        self.transposition_table = [None] * TT_SIZE
+        self.tt_size = TT_SIZE
+        self.search_cycle = 0  # used in TT replacement strategy to allow prioritization of newer entries
 
     # MOVE ORDERING: sort the legal_moves to 'guess' which ones will be best, try them first for a fast beta cutoff
     def score_move(self, move, depth, hash_move=None):
@@ -70,7 +78,7 @@ class Search:
         else:                                               # last priority, use history table score 
             # determine moving piece's history-table index 
             pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
-            return self.history_table[pc_type_index][move.destination_index]    
+            return self.history_table[pc_type_index][move.destination_index]  
 
     # iterative deepening wrapper for search_root
     def find_best_move(self, root_node, color_to_play, time_limit=5):
@@ -97,9 +105,16 @@ class Search:
         
         # if no book move found, proceed with normal search
         start_time = time.time()
+        self.search_cycle += 1  # nodes from higher search cycles are prioritized during a TT collision
         self.nodes_searched = 0
         last_completed_depth = 0
         final_best_move = None
+
+        # reset killer table and decay history table
+        self.killer_table = [[None, None] for _ in range(MAX_DEPTH + 1)]
+        for piece_type in range(12):
+            for square in range(120):
+                self.history_table[piece_type][square] //= 2    # divide all values by 2
 
         # use a try/catch block to catch TimeUp errors
         try:
@@ -149,9 +164,9 @@ class Search:
 
     # wrapper function for minimax, returns the move with the most favorable evaluation for the provided color_to_play
     def search_root(
-            self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
-            depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
-        ):    
+        self, root_node, color_to_play, alpha = -INFINITY, beta = INFINITY, 
+        depth = 5, time_limit = None, start_time = None, best_move_last_depth = None
+    ):    
         # SET UP INITIAL MINIMAX CALL
         legal_moves, _ = generate_moves(root_node) # all legal moves
         best_move = None
@@ -175,23 +190,19 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                move_eval = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time)
+                score = self.minimax(root_node, alpha, beta, 'black', depth - 1, time_limit, start_time, ply=0)
                 root_node.unmake_move(move)
-                if (move_eval > best_eval):
-                    best_eval = move_eval
+
+                # START: DEBUG BLOCK FOR WHITE, UNCOMMENT TO DISPLAY DEBUG OUTPUT
+                # print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}")
+                # END: DEBUG BLOCK FOR WHITE
+
+                if (score > best_eval):
+                    best_eval = score
                     best_move = move
 
-                alpha = max(alpha, move_eval)
-                if alpha >= beta:       # beta cut-off, update killer and history tables, break
-                    if not move.piece_captured:     # if this was not a capture
-                        # shift over top two killer moves for this depth
-                        killer_table[depth][1] = killer_table[depth][0]
-                        killer_table[depth][0] = move
-
-                        # give a bonus of depth^2 to the this piece's history table destination square
-                        pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
-                        dest = move.destination_index
-                        history_table[pc_type_index][dest] += depth * depth
+                alpha = max(alpha, score)
+                if alpha >= beta:
                     break
         
         # black to move
@@ -200,29 +211,25 @@ class Search:
 
             for move in legal_moves:
                 root_node.make_move(move)
-                move_eval = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time)
+                score = self.minimax(root_node, alpha, beta, 'white', depth - 1, time_limit, start_time, ply=0)
                 root_node.unmake_move(move)
-                if (move_eval < best_eval):
-                    best_eval = move_eval
+
+                # START: DEBUG BLOCK FOR BLACK, UNCOMMENT TO DISPLAY DEBUG OUTPUT
+                # print(f"Move: {move_to_algebraic(move):<8} Score: {score:<8}")
+                # END: DEBUG BLOCK FOR BLACK
+
+                if (score < best_eval):
+                    best_eval = score
                     best_move = move
 
-                beta = min(beta, move_eval)
-                if (beta <= alpha):     # beta cut-off, update killer and history tables, break
-                    if not move.piece_captured:     # if this was not a capture
-                        # shift over top two killer moves for this depth
-                        killer_table[depth][1] = killer_table[depth][0]
-                        killer_table[depth][0] = move
-
-                        # give a bonus of depth^2 to the this piece's history table destination square
-                        pc_type_index = HISTORY_OUTER_INDICES[move.moving_piece]
-                        dest = move.destination_index
-                        history_table[pc_type_index][dest] += depth * depth
+                beta = min(beta, score)
+                if beta <= alpha: 
                     break
         
         return best_move
 
     # recursive game search, minimax + alpha-beta pruning, initiated by search_root()
-    def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time):
+    def minimax(self, current_position, alpha, beta, color_to_play, depth, time_limit, start_time, ply):
         # check if time limit exceeded before searching
         if (time.time() - start_time) > time_limit:
             raise self.TimeUpError()
@@ -231,22 +238,21 @@ class Search:
 
         # BASE CASE 1: threefold repetitions
         if current_position.is_repetition():
-            return 0 # draw score
+            return 0
 
         history_table = self.history_table
         killer_table = self.killer_table
-        transposition_table = self.transposition_table
 
         # generate all legal moves and count the number of checks in the position
         legal_moves, check_count = generate_moves(current_position) # all legal moves
 
-        # BASE CASE 2: checkmate, stalemate, fifty move rule, or depth = 0
+        # BASE CASE 2: checkmate, stalemate, fifty move rule
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, base case #1: it's checkmate
                 if current_position.color_to_play == 'white':
-                    return -99999 - depth   # white is checkmated, favorable eval for black 
+                    return -99999 + ply   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 + depth    # black is checkmated, favorable eval for white
+                    return 99999 - ply    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, base case #2: it's stalemate
                 return 0                    # stalemate eval
@@ -254,48 +260,68 @@ class Search:
         # check for fifty move rule draws
         if current_position.fifty_move_criteria_met():
             return 0 # draw score
-            
-        if depth == 0:                      # if depth == 0, base case #3: max depth reached
-            # enter quiescence routine
-            return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time)
+
+        # if depth == 0, enter quiescence routine
+        if depth == 0:
+            return self.quiescence_search(current_position, alpha, beta, color_to_play, time_limit, start_time, ply)
         
         # RECURSIVE CASE: 
-
         # futility pruning setup
         futility_enabled = False
         static_eval = 0
         if depth <= 2 and check_count == 0: # only allow futility pruning if no checks and depth is below 3
-            futility_enabled = True
             static_eval = evaluate_position(current_position)
+
+            # to prevent aggressive over-pruning in a won position, disable futility when above the win threshold
+            won_position = abs(static_eval) > WIN_SCORE
+
+            # count material
+            material_count = 0
+            for piece in ['Q', 'R', 'N', 'B', 'q', 'r', 'n', 'b']:
+                if piece.lower() == 'q':
+                    material_count += len(current_position.piece_lists[piece]) * 4
+                elif piece.lower() == 'r':
+                    material_count += len(current_position.piece_lists[piece]) * 2
+                elif piece.lower() == 'n' or piece.lower() == 'b':
+                    material_count += len(current_position.piece_lists[piece])
+
+            # disable futility pruning near the end of the game
+            if material_count > 4 and not won_position:
+                futility_enabled = True
 
         original_alpha = alpha
         original_beta = beta
 
-        # before searching, check transposition table for previous encounters of this position
-        hash_move = None    # the strongest move to be retrieved from the transposition table for precise move-ordering 
+        # before searching, perform a TT lookup
         position_hash = current_position.zobrist_hash
-        if position_hash in transposition_table:
-            entry = transposition_table[position_hash]
-            stored_eval = entry['eval']
-            stored_depth = entry['depth']
-            stored_flag = entry['flag']
-            if 'best_move' in entry:
-                hash_move = entry['best_move']
+        table_index = position_hash & (self.tt_size - 1)
+        tt_entry = self.transposition_table[table_index]
+        hash_move = None
 
-            if stored_depth >= depth:               # only trust evals from depths >= current depth
-                if stored_flag == 'EXACT':          # node was evaluated to the leaves, evaluation is exact
-                    return stored_eval
-                elif stored_flag == 'LOWERBOUND':   # beta cut-off occured
-                    if stored_eval > alpha:         # if stored eval is greater than alpha, update alpha to it
-                        alpha = stored_eval
-                elif stored_flag == 'UPPERBOUND':   # alpha was never improved
-                    if stored_eval < beta:          # if stored eval is lower than beta, update beta to it
-                        beta = stored_eval
-                    
-                if alpha >= beta:                   # if updated alpha/beta vals now meet the pruning condition
-                    return stored_eval
+        # if an entry is found, check hash to ensure it's not from a different position (via collisions)
+        if tt_entry and tt_entry['hash'] == position_hash:
+            # only use cached data from deeper or equivalent searches
+            if tt_entry['depth'] >= depth: 
+                stored_eval = tt_entry['eval']
+                stored_flag = tt_entry['flag']
 
-        # if transposition table didn't contain position, or didn't sufficiently tighten alpha/beta window, proceed
+                # use cached evaluation to either narrow alpha-beta window or return a score directly
+                if stored_flag == 'EXACT':
+                    return stored_eval
+                elif stored_flag == 'LOWERBOUND':
+                    alpha = max(alpha, stored_eval)
+                elif stored_flag == 'UPPERBOUND':
+                    beta = min(beta, stored_eval)
+
+                # if search window has now met the pruning condition -> prune this branch
+                if alpha >= beta:
+                    return stored_eval
+                
+            # retrieve the hash move regardless of depth
+            if 'best_move' in tt_entry:
+                hash_move = tt_entry['best_move']
+
+        # if TT didn't allow for an early return, proceed with the core search
         # sort legal moves based on move-ordering score in descending order
         # sorting priority: hash move -> captures w/ MVV-LVA -> killer moves -> history table score
         legal_moves.sort(key=lambda move: self.score_move(move, depth, hash_move), reverse=True)
@@ -305,9 +331,19 @@ class Search:
             best_move = None         # track best move to store in TT for move-ordering
 
             for move_index, move in enumerate(legal_moves):
-                # first, check if futility pruning applies
+                # don't use LMR or futility on pawn pushes at or above the 6th rank
+                is_dangerous_pawn_push = (
+                    move.moving_piece == 'P' and 
+                    move.destination_index <= 48
+                )
+
+                # check if futility applies
                 if futility_enabled:
-                    if not move.piece_captured and not move.promotion_piece: # futility pruning only for quiet moves
+                    if (
+                        (not move.piece_captured) 
+                        and (not move.promotion_piece)
+                        and (not is_dangerous_pawn_push)
+                    ):
                         margin = FUTILITY_MARGINS[depth]
 
                         # if current eval + safety margin still can't raise alpha
@@ -325,7 +361,8 @@ class Search:
                         'black', 
                         depth - 1, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
                 
                 # 2: null window (alpha, alpha+1) search for all subsequent moves
@@ -339,6 +376,7 @@ class Search:
                         and (not move.piece_captured) 
                         and (not move.promotion_piece)
                         and (check_count == 0)
+                        and (not is_dangerous_pawn_push)
                     ):
                         reduction = 1   # reduce depth for late moves
 
@@ -352,7 +390,8 @@ class Search:
                         'black', 
                         reduced_depth, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
 
                     # 3: if null window search failed high, re-search with a full window to full depth
@@ -364,7 +403,8 @@ class Search:
                             'black', 
                             depth - 1, 
                             time_limit, 
-                            start_time
+                            start_time,
+                            ply + 1,
                         )
 
                 current_position.unmake_move(move)
@@ -387,39 +427,61 @@ class Search:
                         history_table[pc_type_index][dest] += depth * depth
                     break
 
-            # after search completion, update transposition table
-            if max_eval <= original_alpha:      
-                flag = 'UPPERBOUND'
-                max_eval = original_alpha
-            elif max_eval >= original_beta:              
-                flag = 'LOWERBOUND'
-                max_eval = original_beta
-            else:                               
-                flag = 'EXACT'
-            
-            # create new entry / update existing entry in transposition table
-            old = transposition_table.get(position_hash)
-            if (not old) or (depth >= old['depth']): # only write to TT if at deeper iteration than existing entry
-                entry = {
-                    'eval': max_eval,
+            # after search completion, write results to transposition table
+            final_eval = max_eval
+            flag = ''
+            if final_eval >= beta:              # search failed-high -> beta cutoff
+                flag = 'LOWERBOUND'             # this node's true evaluation is at least final_eval
+            elif final_eval <= original_alpha:  # search failed-low -> could not raise alpha
+                flag = 'UPPERBOUND'             # this node's true evaluation is at most final_eval
+            else:
+                flag = 'EXACT'                  # final_score was within alpha-beta bounds
+
+            # TT replacement strategy
+            should_write = False
+            if tt_entry is None:  
+                # always write to empty slots
+                should_write = True     
+            elif tt_entry['age'] < self.search_cycle:
+                # existing entry is old, override it
+                should_write = True    
+            elif depth >= tt_entry['depth']:
+                # existing entry is from an equal or shallower depth, override it
+                should_write = True
+
+            if should_write:
+                new_entry = {
+                    'hash': position_hash,
+                    'eval': final_eval,
                     'depth': depth,
                     'flag': flag,
-                }
-                if flag == 'EXACT': # only store a hash move for move-ordering if evaluation was exact
-                    entry['best_move'] = best_move
+                    'age': self.search_cycle,
+                }                
+                if best_move:
+                    new_entry['best_move'] = best_move
 
-                transposition_table[position_hash] = entry
+                self.transposition_table[table_index] = new_entry
 
-            return max_eval
+            return final_eval
 
         else: # black to move
             min_eval = INFINITY
             best_move = None     # track the best move to store in TT for move-ordering
 
             for move_index, move in enumerate(legal_moves):
-                # first, check if futility pruning applies
+                # don't use LMR or futility on pawn pushes at or below the 3rd rank
+                is_dangerous_pawn_push = (
+                    move.moving_piece == 'p' and
+                    move.destination_index >= 71
+                )
+                 
+                # check if futility pruning applies
                 if futility_enabled:
-                    if not move.piece_captured and not move.promotion_piece: # futility pruning only for quiet moves
+                    if (
+                        (not move.piece_captured) 
+                        and (not move.promotion_piece)
+                        and (not is_dangerous_pawn_push)
+                    ):
                         margin = FUTILITY_MARGINS[depth]
 
                         # if current eval - safety margin still can't lower beta
@@ -437,7 +499,8 @@ class Search:
                         'white', 
                         depth - 1, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
 
                 # 2: null window (beta - 1, beta) search for all subsequent moves
@@ -445,13 +508,13 @@ class Search:
                     reduction = 0   # used in late-move reductions
                     
                     # LMR conditions
-                    # LMR conditions
                     if (
                         (depth >= 3)
                         and (move_index >= 3) 
                         and (not move.piece_captured) 
                         and (not move.promotion_piece)
                         and (check_count == 0)
+                        and (not is_dangerous_pawn_push)
                     ):
                         reduction = 1   # reduce depth for late moves
 
@@ -465,7 +528,8 @@ class Search:
                         'white', 
                         reduced_depth, 
                         time_limit, 
-                        start_time
+                        start_time,
+                        ply + 1,
                     )
 
                     # 3: if null window search failed low, re-search with a full window to full depth
@@ -477,7 +541,8 @@ class Search:
                             'white', 
                             depth - 1, 
                             time_limit, 
-                            start_time
+                            start_time,
+                            ply + 1,
                         )
 
                 current_position.unmake_move(move)
@@ -500,38 +565,49 @@ class Search:
                         history_table[pc_type_index][dest] += depth * depth
                     break
             
-            # after search completion, update transposition table
-            if min_eval <= original_alpha:      
-                flag = 'UPPERBOUND'
-                min_eval = original_alpha
-            elif min_eval >= original_beta:              
-                flag = 'LOWERBOUND'
-                min_eval = original_beta
-            else:                               
-                flag = 'EXACT'
+            # after search completion, write results to transposition table
+            final_eval = min_eval
+            flag = ''
+            if final_eval <= alpha:                 # search failed-low -> alpha cutoff
+                flag = 'UPPERBOUND'                 # this node's true evaluation is at most final_eval
+            elif final_eval >= original_beta:       # search failed-high -> could not lower beta
+                flag = 'LOWERBOUND'                 # this node's true evaluation is at least final_eval
+            else:
+                flag = 'EXACT'                      # final score was within alpha-beta bounds
 
-            # create new entry / update existing entry in transposition table
-            old = transposition_table.get(position_hash)
-            if (not old) or (depth >= old['depth']): # only write to TT if at deeper iteration than existing entry
-                entry = {
-                    'eval': min_eval,
+            # TT replacement strategy
+            should_write = False
+            if tt_entry is None:
+                # always write to empty slots
+                should_write = True
+            elif tt_entry['age'] < self.search_cycle:
+                # existing entry is old, override it
+                should_write = True
+            elif depth >= tt_entry['depth']:
+                # existing entry is from an equal or shallower depth, override it
+                should_write = True
+
+            if should_write:
+                new_entry = {
+                    'hash': position_hash,
+                    'eval': final_eval,
                     'depth': depth,
                     'flag': flag,
+                    'age': self.search_cycle,
                 }
-                if flag == 'EXACT': # only store a hash move for move-ordering if evaluation was exact
-                    entry['best_move'] = best_move
+                if best_move:
+                    new_entry['best_move'] = best_move
 
-                transposition_table[position_hash] = entry
+                self.transposition_table[table_index] = new_entry
             
-            return min_eval
+            return final_eval
 
     # extends search at minimax leaf nodes to mitigate the 'horizon effect', only considers captures / check escapes
     # hard coded depth limit of 8 to lockdown any runaway recursions
     def quiescence_search(
         self, current_position, alpha, beta, color_to_play, 
-        time_limit, start_time, q_depth=1, max_depth=8
-    ):
-        
+        time_limit, start_time, ply, q_depth=1, max_depth=8,
+    ):        
         self.max_q_depth = max(self.max_q_depth, q_depth)
 
         # before searching, check if time limit exceeded
@@ -547,16 +623,16 @@ class Search:
         if len(legal_moves) == 0:           # if no legal moves
             if check_count > 0:             # if king is in check, it's checkmate
                 if current_position.color_to_play == 'white':
-                    return -99999 + q_depth   # white is checkmated, favorable eval for black 
+                    return -99999 + ply   # white is checkmated, favorable eval for black 
                 elif current_position.color_to_play == 'black':
-                    return 99999 - q_depth    # black is checkmated, favorable eval for white
+                    return 99999 - ply    # black is checkmated, favorable eval for white
                 
             elif check_count == 0:          # if no checks, it's stalemate
                 return 0                    # stalemate eval
         
-        # only filter out non-captures if no checks... if a king is in check, we must evaluate all legal moves
+        # if there are no checks, filter out moves that are not captures or promotions
         if check_count == 0:
-            legal_moves = [move for move in legal_moves if move.piece_captured]
+            legal_moves = [move for move in legal_moves if move.piece_captured or move.promotion_piece]
             if not legal_moves: # if there are no legal non-captures, return the final evaluation
                 return evaluate_position(current_position)
 
@@ -568,11 +644,11 @@ class Search:
         stand_pat_eval = evaluate_position(current_position)
         if color_to_play == 'white':            # white to move
             if stand_pat_eval >= beta:          # fail high, black has a better option
-                return beta
+                return stand_pat_eval
             alpha = max(alpha, stand_pat_eval)  # update alpha if the stand pat eval improves on it
         elif color_to_play == 'black':          # black to move
             if stand_pat_eval <= alpha:         # fail low, white has a better option
-                return alpha 
+                return stand_pat_eval 
             beta = min(beta, stand_pat_eval)    # update beta if the stand pat eval improves on it
             
         # third base case: no captures / check evasion moves available
@@ -587,7 +663,7 @@ class Search:
             max_eval = stand_pat_eval
             for move in legal_moves:
                 # first run delta pruning check
-                if check_count == 0: # cannot delta prune while in check
+                if check_count == 0 and not move.promotion_piece: # cannot delta prune while in check
                     attacker_value = PIECE_VALUES[move.moving_piece.lower()]
                     victim_value = PIECE_VALUES[move.piece_captured.lower()]
                     material_gain = (victim_value - attacker_value) * 100 # multiply by 100 for centipawn eval
@@ -599,7 +675,7 @@ class Search:
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
                     current_position, alpha, beta, 'black', 
-                    time_limit, start_time, q_depth+1, max_depth
+                    time_limit, start_time, ply+1, q_depth+1, max_depth
                 )
                 current_position.unmake_move(move)
 
@@ -607,7 +683,7 @@ class Search:
                 alpha = max(alpha, returned_eval)
 
                 if alpha >= beta:
-                    return beta
+                    return max_eval
                 
             return max_eval
 
@@ -615,7 +691,7 @@ class Search:
             min_eval = stand_pat_eval
             for move in legal_moves:
                 # first run delta pruning check
-                if check_count == 0: # cannot delta prune while in check
+                if check_count == 0 and not move.promotion_piece: # cannot delta prune while in check
                     attacker_value = PIECE_VALUES[move.moving_piece.lower()]
                     victim_value = PIECE_VALUES[move.piece_captured.lower()]
                     material_gain = (victim_value - attacker_value) * 100 # multiply by 100 for centipawn eval
@@ -627,7 +703,7 @@ class Search:
                 current_position.make_move(move)
                 returned_eval = self.quiescence_search(
                     current_position, alpha, beta, 'white', 
-                    time_limit, start_time, q_depth+1, max_depth
+                    time_limit, start_time, ply+1, q_depth+1, max_depth
                 )
                 current_position.unmake_move(move)
 
@@ -635,7 +711,7 @@ class Search:
                 beta = min(beta, returned_eval)
 
                 if beta <= alpha:
-                    return alpha
+                    return min_eval
                 
             return min_eval
 

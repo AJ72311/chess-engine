@@ -2,6 +2,7 @@ __pycache__/
 venv/
 book.bin
 
+syzygy-tables/
 /node_modules
 
 # Logs
