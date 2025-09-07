@@ -24,3 +24,6 @@ class PlayMoveResponse(BaseModel):
     depth_reached: int | None
     nodes_searched: int | None
     is_book: bool
+
+class StatusResponse(BaseModel):
+    status: str
