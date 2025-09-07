@@ -11,10 +11,14 @@ type SquareStyles = Partial<Record<Square, CSSProperties>>;
 
 function Game({
     isIlluminated,
-    startupCountdown
+    startupCountdown,
+    initialServerStatus,
+    isStartingUp,
 } : {
     isIlluminated: boolean
     startupCountdown: number
+    initialServerStatus: string
+    isStartingUp: boolean
 }) {
     // create a chess.js instance using ref to maintain game state across renders
     const chessGameRef = useRef(new Chess());
@@ -40,7 +44,16 @@ function Game({
 
     // used to animate odometer when going from a book move to a normal one
     const [odometerPositions, setOdometerPositions] = useState<number>(0);
-    const [odometerDepth, setOdometerDepth] = useState<number>(0);   
+    const [odometerDepth, setOdometerDepth] = useState<number>(0);  
+    
+    // used to track server status and messages
+    const [serverStatus, setServerStatus] = useState<string>(initialServerStatus);
+    const [serverMessage, setServerMessage] = useState<{ type: string, text: string }>({ type: 'info', text: '' });
+
+    // update the local serverStatus when its prop changes
+    useEffect(() => {
+        setServerStatus(initialServerStatus);
+    }, [initialServerStatus]);
 
     // briefly set odometer values to 0 to ensure animation when transitioning from "Book Move" string
     const wasBookMoveRef = useRef<boolean>(false);
@@ -93,6 +106,10 @@ function Game({
             const gameID = data.data.game_id ? data.data.game_id : null; // gameID only in /new-game
             setIsBookMove(data.data.is_book);
 
+            if (data.data.server_status) {
+                setServerStatus(data.data.server_status)
+            }
+
             const result = chessGame.move(movePlayed);
             // safety check: if move was illegal, log  error and load the returned FEN
             if (result === null) {
@@ -125,13 +142,21 @@ function Game({
                 return; 
             }
         
-        } catch (error) {
+        } catch (error: any) {
+            if (error.response && error.response.status === 503) {
+                setServerMessage({
+                    type: 'error',
+                    text: 'Server is at maximum concurrent game capacity, please check again in a few minutes.'
+                });
+                setServerStatus('busy');
+            }
+
             throw error;
         
         } finally {
             setIsLoading(false)
         }
-    }, [sessionID, boardPosition]);
+    }, [sessionID, boardPosition, chessGame]);
 
     // helper function for useEffect, finds king index to highlight in red for checks
     function findKingSquare(color: 'w' | 'b'): Square {
@@ -402,6 +427,11 @@ function Game({
 
     return (
         <div className={styles.container}>
+            {/* {(serverStatus === 'heavy_load' || serverStatus === 'busy') && !gameOver && isIlluminated && (
+                <div className={styles.heavyLoadIndicator}>
+                    Server is under heavy load. Move quality may be reduced.
+                </div>
+            )} */}
             <div className={styles.chessboardContainer}>
                 <div className={`${styles.statusWrapper} ${isIlluminated ? styles.illuminated : ''}`}>
                     <StatusLines 
@@ -409,6 +439,10 @@ function Game({
                         isLoading={isLoading}
                         isIlluminated={isIlluminated}
                         countdown={startupCountdown > 0 ? startupCountdown : countdown}
+                        serverStatus={serverStatus}
+                        serverMessage={serverMessage}
+                        sessionID={sessionID}
+                        isStartingUp={isStartingUp}
                     />
                 </div>
                 <div className={`${styles.engineInfo} ${isIlluminated ? styles.illuminated : ''}`}>
@@ -451,8 +485,14 @@ function Game({
                     <Chessboard 
                         position={boardPosition}
                         onPieceDrop={onDrop}
-                        onSquareClick={(isLoading || !isIlluminated) ? undefined : onSqrClick}
-                        arePiecesDraggable={!isLoading && isIlluminated}
+                        onSquareClick={
+                            (isLoading || !isIlluminated || gameOver || (sessionID === null && serverStatus === 'busy')) 
+                            ? undefined 
+                            : onSqrClick
+                        }
+                        arePiecesDraggable={
+                            !isLoading && isIlluminated && !gameOver && (sessionID !== null || serverStatus !== 'busy')
+                        }
                         customSquareStyles={{
                             ...optionSquares,
                             ...checkHighlight,

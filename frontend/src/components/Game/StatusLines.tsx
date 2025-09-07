@@ -98,29 +98,46 @@ export function StatusLines({
     isLoading,
     isIlluminated,
     countdown,
+    serverStatus,
+    serverMessage,
+    sessionID,
+    isStartingUp,
 } : {
     gameOver: string
     isLoading: boolean
     isIlluminated: boolean
     countdown: number
+    serverStatus: string
+    serverMessage: { type: string, text: string }
+    sessionID: string | null
+    isStartingUp: boolean
 }) {
      // helper to format game over text
     const formatGameOver = (s: string) =>
         `${s.charAt(0).toUpperCase()}${s.slice(1)}!`
 
     const engineMessage = useRotatingMessage(isLoading, 2000);
-    const animatedMessage = gameOver
-    ? formatGameOver(gameOver)
-    : isIlluminated
-        ? isLoading
-            ? `${engineMessage}`
-            : 'Your turn!'
-        : 'Quieceros is waking up...'
+
+    const getPriorityMessage = () => {
+        if (gameOver) return formatGameOver(gameOver);
+        if (serverMessage.text) return serverMessage.text;
+        if (serverStatus === 'busy' && sessionID === null) {
+            return 'Server is at maximum concurrent game capacity, please try again in a few minutes!';
+        }
+        if (serverStatus === 'error') {
+            return 'Could not connect to the server.';
+        }
+        if (!isIlluminated) return 'Quieceros is waking up...';
+        if (isLoading) return engineMessage;
+        return 'Your turn!';
+    }
+
+    const animatedMessage = getPriorityMessage()
 
     return (
         <div className={styles.countdown} aria-live="polite">
             <div className={styles.timer} aria-live="off">
-                {isLoading || countdown > 0
+                {isLoading || (isStartingUp && countdown > 0)
                     ? `${countdown}s`          
                     : '...' 
                 }

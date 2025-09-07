@@ -115,6 +115,7 @@ async def play_move(request: Request, play_move_req: PlayMoveRequest):
     session_map = request.app.state.session_map
     task_queues = request.app.state.task_queues
     results_dict = request.app.state.results_dict
+    session_count = request.app.state.session_count
     
     def play_move_task():
         session_id = play_move_req.session_id
@@ -139,12 +140,23 @@ async def play_move(request: Request, play_move_req: PlayMoveRequest):
     try:
         new_fen, move_info = await loop.run_in_executor(None, play_move_task)
 
+        # after the move is complete, check server capacity and inform frontend
+        current_count = session_count.value
+        status = 'ok'
+        
+        if current_count >= MAX_SESSIONS:
+            status = 'busy'
+        # the point at which SMT will be needed (assuming max. 2 workers per logical core)
+        elif current_count > (NUM_WORKERS / 4):
+            status = 'heavy_load'
+
         return PlayMoveResponse(
             new_fen = new_fen,
             move_played = move_info['move'],
             depth_reached = move_info['depth'],
             nodes_searched = move_info['nodes'],
-            is_book = move_info['is_book']
+            is_book = move_info['is_book'],
+            server_status = status,
         )
 
     except KeyError as e:
