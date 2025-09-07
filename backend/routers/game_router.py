@@ -5,7 +5,7 @@ import time
 import asyncio
 
 # --- constants ---
-WORKER_TIMEOUT = 100  # workers must respond in 10 seconds, otherwise timeout
+WORKER_TIMEOUT = 10   # workers must respond in 10 seconds, otherwise timeout
 MAX_SESSIONS = 8      # concurrent session cap
 
 router = APIRouter()
@@ -19,7 +19,7 @@ def _dispatch_task(task_queues, results_dict, worker_id: int, command: str, kwar
     task_id = uuid.uuid4().hex
     task_queues[worker_id].put((task_id, command, kwargs))
 
-    # asynchronously wait for result to appear in results_dict
+    # wait for result to appear in results_dict
     start_time = time.time()
     while task_id not in results_dict:
         if time.time() - start_time > WORKER_TIMEOUT:
