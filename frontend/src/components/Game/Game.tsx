@@ -36,6 +36,7 @@ function Game({
 
     // used to track the session with the engine's api
     const [sessionID, setSessionID] = useState<string | null>(null);
+    const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [countdown, setCountdown] = useState<number>(0);
     const [positionsSearched, setPositionsSearched] = useState<number>(0);
@@ -54,6 +55,49 @@ function Game({
     useEffect(() => {
         setServerStatus(initialServerStatus);
     }, [initialServerStatus]);
+
+    // refs to hold Ids for setTimeout calls for session expiration
+    const timeoutWarningRef = useRef<number | null>(null);
+    const timeoutExpirationRef = useRef<number | null>(null);
+
+    // resets session timeout timers, called after each player move
+    const resetTimeoutTimer = useCallback(() => {
+        // clear existing timers
+        if (timeoutWarningRef.current) clearTimeout(timeoutWarningRef.current);
+        if (timeoutExpirationRef.current) clearTimeout(timeoutExpirationRef.current);
+
+        // clear lingering timeout messages
+        setServerMessage({ type: 'info', text: '' });
+        setIsSessionExpired(false);
+
+        // set a new warning timer for 10 minutes (600,000 milliseconds)
+        timeoutWarningRef.current = setTimeout(() => {
+            setServerMessage({ 
+                type: 'warning',
+                text: 'Session will expire in 5 minutes due to inactivity, play a move!',
+            });
+        }, 600 * 1000);
+
+        // set a new expiration timer for 15 minutes (900,000 milliseconds)
+        timeoutExpirationRef.current = setTimeout(() => {
+            setServerMessage({
+                type: 'error',
+                text: 'Session has expired, reload to start a new game!',
+            });
+
+            // invalidate sessionID on the client side
+            setSessionID(null);
+            setIsSessionExpired(true);
+        }, 900 * 1000);
+    }, []);
+
+    // cleanup timers on component unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutWarningRef.current) clearTimeout(timeoutWarningRef.current);
+            if (timeoutExpirationRef.current) clearTimeout(timeoutExpirationRef.current);
+        };
+    }, []); 
 
     // briefly set odometer values to 0 to ensure animation when transitioning from "Book Move" string
     const wasBookMoveRef = useRef<boolean>(false);
@@ -151,7 +195,15 @@ function Game({
                 setServerStatus('busy');
             }
 
-            throw error;
+            if (error.response && error.response.status === 404) {
+                setServerMessage({
+                    type: 'error',
+                    text: 'Session has expired, reload to start a new game!',
+                });
+                setSessionID(null);
+            }
+
+            throw error;  // re-throw for onDrop / onSquareClick to catch
         
         } finally {
             setIsLoading(false)
@@ -298,6 +350,9 @@ function Game({
                 promotion: 'q', // always promote to queen for simplicity
             });
 
+            // reset session timeout timers
+            resetTimeoutTimer();
+
             // if the move succeeded
             setBoardPosition(chessGame.fen());
             setLastMoveHighlight(highlightFromUCI(`${sourceSqr}${destinationSqr}${result.promotion??''}`));
@@ -329,7 +384,7 @@ function Game({
             // if the move failed
             return false;
         }
-    }, [chessGame, handleMove]);
+    }, [chessGame, handleMove, resetTimeoutTimer]);
 
     const onDragEnd = useCallback(() => {
         // user released outside valid square or cancelled drag, reset valid move options
@@ -382,6 +437,9 @@ function Game({
                 promotion: 'q', // always promote to queen for simplicity
             });
 
+            // reset session timeout timers
+            resetTimeoutTimer();
+
             // if move succeeded
             setBoardPosition(chessGame.fen());
             setLastMoveHighlight(highlightFromUCI(`${moveFrom}${square}${result.promotion??''}`));
@@ -423,7 +481,7 @@ function Game({
             // return early
             return;
         }
-    }, [chessGame, moveFrom, handleMove]);
+    }, [chessGame, moveFrom, handleMove, resetTimeoutTimer]);
 
     return (
         <div className={styles.container}>
@@ -486,12 +544,16 @@ function Game({
                         position={boardPosition}
                         onPieceDrop={onDrop}
                         onSquareClick={
-                            (isLoading || !isIlluminated || gameOver || (sessionID === null && serverStatus === 'busy')) 
+                            (
+                                isLoading || !isIlluminated || gameOver || isSessionExpired 
+                                || (sessionID === null && serverStatus === 'busy')
+                            ) 
                             ? undefined 
                             : onSqrClick
                         }
                         arePiecesDraggable={
-                            !isLoading && isIlluminated && !gameOver && (sessionID !== null || serverStatus !== 'busy')
+                            !isLoading && isIlluminated && !gameOver && !isSessionExpired
+                            && (sessionID !== null || serverStatus !== 'busy')
                         }
                         customSquareStyles={{
                             ...optionSquares,
@@ -514,7 +576,7 @@ function Game({
                 <div 
                     className={`
                         ${styles.statusIndicator} 
-                        ${(isLoading || !isIlluminated || gameOver) ? styles.statusBusy : ''}
+                        ${(isLoading || !isIlluminated || gameOver || isSessionExpired) ? styles.statusBusy : ''}
                     `}
                 ></div>
             </div>

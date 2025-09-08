@@ -17,6 +17,7 @@
     color: rgb(155, 86, 112);
     font-style: italic;
     font-size: 12px;
+    font-weight: 100;
     position: absolute;
     top: 5px;
 }
@@ -136,9 +137,21 @@
 }
 
 .message {
-  font-style: italic;
-  color: #e6e6e6;
-  transition: color 1.5s ease;
+    font-style: italic;
+    color: #e6e6e6;
+    transition: color 1.5s ease;
+}
+
+.warningMessage {
+    font-style: italic;
+    transition: color 1.5s ease;
+    color: #e79939; 
+}
+
+.errorMessage {
+    font-style: italic;
+    transition: color 1.5s ease;
+    color: #FF6B6B; 
 }
 
 .illuminated .countdown, .illuminated .message {

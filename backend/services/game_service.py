@@ -40,6 +40,13 @@ def run_worker(task_queue, result_dict):
                 result = _play_move(active_sessions, **kwargs)
                 result_dict[task_id] = ('ok', result)
 
+            # --- prune_single_session task ---
+            elif command == 'prune_single_session':
+                target_id = kwargs.get('session_id')
+                if target_id in active_sessions:
+                    print(f'Pruning session {target_id} due to client unload')
+                    del active_sessions[target_id]
+
             else:
                 result_dict[task_id] = ('error', 'Unknown command')
         

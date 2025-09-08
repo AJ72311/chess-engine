@@ -134,6 +134,11 @@ export function StatusLines({
 
     const animatedMessage = getPriorityMessage()
 
+    const messageClassName = 
+        serverMessage.type === 'error' || (serverStatus === 'busy' && !isIlluminated) ? styles.errorMessage : 
+        serverMessage.type === 'warning' ? styles.warningMessage : 
+        styles.message;
+
     return (
         <div className={styles.countdown} aria-live="polite">
             <div className={styles.timer} aria-live="off">
@@ -149,7 +154,7 @@ export function StatusLines({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3 }}
-                className={styles.message}
+                className={messageClassName}
             >
                 {animatedMessage}
             </motion.div>
