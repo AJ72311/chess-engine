@@ -40,6 +40,15 @@ def run_worker(task_queue, result_dict):
                 result = _play_move(active_sessions, **kwargs)
                 result_dict[task_id] = ('ok', result)
 
+            # --- prune_sessions task
+            elif command == 'prune_sessions':
+                sessions_before = len(active_sessions)
+                _prune_inactive_sessions(active_sessions)
+                sessions_after = len(active_sessions)
+
+                pruned_count = sessions_before - sessions_after
+                result_dict[task_id] = ('ok', pruned_count)
+
             # --- prune_single_session task ---
             elif command == 'prune_single_session':
                 target_id = kwargs.get('session_id')

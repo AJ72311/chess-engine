@@ -99,6 +99,28 @@ function Game({
         };
     }, []); 
 
+    // handles pruning the session on the backend when the user closes the tab / reloads
+    useEffect(() => {
+        const handleUnload = () => {
+            if (sessionID) {
+                const payload = { 'session_id': sessionID };
+
+                // sendBeacon requires blob format
+                const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+
+                navigator.sendBeacon('/game/prune-session', blob);
+            }
+        };
+
+        window.addEventListener('beforeunload', handleUnload);
+
+        // clean up when component unmounts to prevent memory leaks
+        return () => {
+            window.removeEventListener('beforeunload', handleUnload);
+        };
+
+    }, [sessionID]);
+
     // briefly set odometer values to 0 to ensure animation when transitioning from "Book Move" string
     const wasBookMoveRef = useRef<boolean>(false);
     useEffect(() => {

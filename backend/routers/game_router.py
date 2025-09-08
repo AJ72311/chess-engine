@@ -1,5 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request
-from schemas.game_schemas import NewGameRequest, NewGameResponse, PlayMoveRequest, PlayMoveResponse, StatusResponse
+from schemas.game_schemas import (
+    NewGameRequest, NewGameResponse, 
+    PlayMoveRequest, 
+    PlayMoveResponse, 
+    StatusResponse,
+    PruneRequest,
+)
 import uuid
 import time
 import asyncio
@@ -242,3 +248,46 @@ async def getStatus(request: Request):
         return StatusResponse(status='heavy_load')
     else:
         return StatusResponse(status='ok')
+    
+@router.post('/prune-session')
+async def prune_session(request: Request, prune_req: PruneRequest):
+    """
+    Handles a fire-and-forget request form a closing client to prune a session.
+    """
+
+    loop = asyncio.get_running_loop()
+
+    # gather necessary shared state objects
+    session_map = request.app.state.session_map
+    session_count = request.app.state.session_count
+    worker_load = request.app.state.worker_load
+    session_count_lock = request.app.state.session_count_lock
+    task_queues = request.app.state.task_queues
+
+    def prune_task():
+        session_id = prune_req.session_id
+        worker_id = session_map.get(session_id)
+
+        # it's possible the session was already pruned by a timeout, only act if it exists
+        if worker_id is not None:
+            with session_count_lock:
+                if session_map.get(session_id) == worker_id:
+                    print(f'Pruning session {session_id} from dispatcher state')
+                    session_count.value -= 1
+                    worker_load[worker_id] -= 1
+
+                    try:
+                        del session_map[session_id]
+                    except KeyError:
+                        pass  # it was already removed, which is fine
+
+            # send a fire-and-forget command to the worker to clean up its memory
+            task_queues[worker_id].put((None, 'prune_single_session', {'session_id': session_id}))
+
+    try:
+        await loop.run_in_executor(None, prune_task)
+    except Exception as e:
+        print(f'An error occurred while pruning a closed session: {e}')
+        raise HTTPException(status_code=500, detail='An internal error occurred during session pruning')
+    
+    return {'status': 'pruning initiated'}

@@ -28,3 +28,6 @@ class PlayMoveResponse(BaseModel):
 
 class StatusResponse(BaseModel):
     status: str
+
+class PruneRequest(BaseModel):
+    session_id: str
