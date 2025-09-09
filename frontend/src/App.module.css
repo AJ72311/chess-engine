@@ -11,6 +11,15 @@
     }
 }
 
+@keyframes fadeInText {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 0.7;
+    }
+}
+
 @keyframes twinkle {
     0%, 3%, 6%, 9%, 100% {
         opacity: 0.4;
@@ -19,6 +28,15 @@
     1.5%, 4.5%, 7.5% {
         opacity: 0.8;
         transform: scale(1.1);
+    }
+}
+
+@keyframes textShineAnimation {
+    from {
+        background-position: -200% center;
+    }
+    to {
+        background-position: 200% center;
     }
 }
 
@@ -117,4 +135,76 @@
 .iconLink[data-tooltip]:hover::after {
     opacity: 1 !important;
     visibility: visible;
+}
+
+.topLeftText {
+    display: inline-block;
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: white; 
+    z-index: 1000;
+    font-family: 'Tahoma', Arial, sans-serif;
+    font-size: 12px; 
+    opacity: 0;
+}
+
+.topLeftText i {
+    font-style: italic;
+    padding-right: 2px;
+}
+
+.topLeftText .engineName {
+    color: #4ca392;
+}
+
+.topLeftText.illuminated {
+    animation: fadeInText 1.5s forwards;
+}
+
+.inlineLogo {
+    height: 1.5em; 
+    width: auto; 
+    vertical-align: middle;
+    margin-left: 0.3em;
+    margin-right: 0.3em;
+    position: relative;
+    top: -1px; 
+}
+
+@keyframes textShine {
+    from { background-position: 100% 0; }
+    to   { background-position: 0% 0; }
+}
+
+.engineName.illuminated {
+    color: transparent;
+    background: 
+    linear-gradient(
+        110deg,
+        #4ca392 40%,
+        #fff     50%,
+        #4ca392 60%
+    );
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: textShine 1.25s ease-out forwards;
+    animation-delay: 1s;
+}
+
+.authorNameBlock.illuminated {
+    color: transparent;
+    background: linear-gradient(
+    110deg,
+    #ccc 40%,
+    #fff 50%,
+    #ccc 60%
+    );
+    background-size: 300% 101%;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: textShine 1.75s ease-out forwards;
+    animation-delay: 2.25s;
 }

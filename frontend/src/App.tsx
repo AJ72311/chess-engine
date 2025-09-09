@@ -1,6 +1,7 @@
 import Game from './components/Game/Game';
 import GithubLogo from './assets/github.svg';
 import EngineLogo from './assets/icon.svg';
+import PythonLogo from './assets/python.svg';
 import styles from './App.module.css';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -67,7 +68,25 @@ function App() {
     }, [isIlluminated, isStartingUp]);
 
     return (
-        <div className={styles.appContainer}>
+            <div className={styles.appContainer}>
+                <div className={`${styles.topLeftText} ${isIlluminated ? styles.illuminated : ''}`}
+            >
+                <span className={
+                    `${styles.engineName} ${isIlluminated ? styles.illuminated : ''}`
+                }>
+                    Quieceros
+                </span>
+                <span> &mdash; </span>
+                <img 
+                    src={PythonLogo} 
+                    alt="Python Logo" 
+                    className={styles.inlineLogo} 
+                />
+                <span className={`${styles.authorNameBlock} ${isIlluminated ? styles.illuminated : ''}`}>
+                    <span> Chess Engine by </span>
+                    <i>AJ Yaseen</i>
+                </span>
+            </div>
             <div className={styles.iconsContainer}>
                 <a
                     href="#"
