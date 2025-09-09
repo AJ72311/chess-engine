@@ -172,9 +172,31 @@
     top: -1px; 
 }
 
-@keyframes textShine {
-    from { background-position: 100% 0; }
-    to   { background-position: 0% 0; }
+@keyframes textShineEngine {
+    0% {
+        background-position: 100% 0;
+    }
+    8.33% {
+        background-position: 0% 0;
+    }
+    100% {
+        background-position: 0% 0;
+    }
+}
+
+@keyframes textShineAuthor {
+    0% {
+        background-position: 100% 0;
+    }
+    8.33% {
+        background-position: 100% 0;
+    }
+    16.66% {
+        background-position: 0% 0;
+    }
+    100% {
+        background-position: 0% 0;
+    }
 }
 
 .engineName.illuminated {
@@ -190,21 +212,19 @@
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: textShine 1.25s ease-out forwards;
-    animation-delay: 1s;
+    animation: textShineEngine 13s ease-out infinite;
 }
 
 .authorNameBlock.illuminated {
     color: transparent;
     background: linear-gradient(
-    110deg,
-    #ccc 40%,
-    #fff 50%,
-    #ccc 60%
+        110deg,
+        #ccc 40%,
+        #fff 50%,
+        #ccc 60%
     );
     background-size: 300% 101%;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: textShine 1.75s ease-out forwards;
-    animation-delay: 2.25s;
+    animation: textShineAuthor 13s ease-out infinite;
 }
