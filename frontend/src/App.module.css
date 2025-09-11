@@ -57,7 +57,7 @@
 }
 
 .icon {
-    width: 45px; 
+    width: 35px; 
     height: auto; 
     opacity: 0;
     transition: opacity 0.3s ease-in-out, filter 0.1s ease-in-out;
@@ -74,15 +74,11 @@
 }
 
 .engineIconLink:hover .icon {
-    filter: drop-shadow(0 0 8px #216e3c);
+    filter: drop-shadow(0 0 2px #216e3c);
 }
 
 .engineIconLink {
     cursor: default;
-}
-
-.githubIconLink:hover .icon {
-    filter: drop-shadow(0 0 1px white);
 }
 
 .iconLink[data-tooltip]::before {
