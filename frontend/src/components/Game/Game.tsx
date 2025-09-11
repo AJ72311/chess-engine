@@ -151,6 +151,11 @@ function Game({
     const handleMove = useCallback(async (playerMove: string) => {
         // get the engine's reply
         setIsLoading(true);
+
+        // used to enforce a minimum 100ms load time for smooth move animations
+        const startTime = Date.now();
+        const minLoadTime = 350  // 500 milliseconds
+
         try {
             const endpoint = sessionID ? '/game/play-move' : '/game/new-game';
             const payload = sessionID
@@ -163,6 +168,14 @@ function Game({
             }
 
             const data = await axios.post(endpoint, payload);
+
+            // ensure a minmum load time has passed for smooth move animations
+            const elapsedTime = Date.now() - startTime;
+            const delayNeeded = minLoadTime - elapsedTime;
+
+            if (delayNeeded > 0) {
+                await new Promise(resolve => setTimeout(resolve, delayNeeded));
+            }
 
             // unpack response
             const newFEN = data.data.new_fen;
