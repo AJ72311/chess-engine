@@ -154,7 +154,7 @@ function Game({
 
         // used to enforce a minimum 100ms load time for smooth move animations
         const startTime = Date.now();
-        const minLoadTime = 350  // 500 milliseconds
+        const minLoadTime = 335  // 500 milliseconds
 
         try {
             const endpoint = sessionID ? '/game/play-move' : '/game/new-game';

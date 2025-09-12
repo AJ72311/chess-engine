@@ -20,7 +20,7 @@
     }
 }
 
-@keyframes twinkle {
+@keyframes twinkleGitHub {
     0%, 3%, 6%, 9%, 100% {
         opacity: 0.4;
         transform: scale(1);
@@ -30,6 +30,18 @@
         transform: scale(1.1);
     }
 }
+
+@keyframes twinkleEngine {
+    0%, 3%, 6%, 9%, 100% {
+        opacity: 0.4;
+        transform: scale(1.15);
+    }
+    1.5%, 4.5%, 7.5% {
+        opacity: 0.8;
+        transform: scale(1.3); 
+    }
+}
+
 
 @keyframes textShineAnimation {
     from {
@@ -63,9 +75,19 @@
     transition: opacity 0.3s ease-in-out, filter 0.1s ease-in-out;
 }
 
+.engineIconLink .icon {
+    transform: scale(1.15);
+}
+
+
 .iconLink.illuminated .icon {
     animation: fadeInLogo 1.5s forwards, 
-               twinkle 30s 1.5s infinite;
+               twinkleGitHub 30s 1.5s infinite;
+}
+
+.engineIconLink.illuminated .icon {
+    animation: fadeInLogo 1.5s forwards, 
+               twinkleEngine 30s 1.5s infinite;
 }
 
 .iconLink:hover .icon {
@@ -74,7 +96,7 @@
 }
 
 .engineIconLink:hover .icon {
-    filter: drop-shadow(0 0 2px #216e3c);
+    filter: drop-shadow(0 0 1px #e06c6a);
 }
 
 .engineIconLink {
@@ -102,7 +124,7 @@
 
 .engineIconLink[data-tooltip]::before {
     white-space: normal; 
-    width: 405px; 
+    width: 395px;
 }
 
 .githubIconLink[data-tooltip]::before {
@@ -151,7 +173,7 @@
 }
 
 .topLeftText .engineName {
-    color: #4ca392;
+    color: #d4615f;
 }
 
 .topLeftText.illuminated {
@@ -200,15 +222,15 @@
     background: 
     linear-gradient(
         110deg,
-        #4ca392 40%,
+        #8f84c1 40%,
         #fff     50%,
-        #4ca392 60%
+        #b9576f 60%
     );
     background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: textShineEngine 13s ease-out infinite;
+    animation: textShineEngine 11s ease-out infinite;
 }
 
 .authorNameBlock.illuminated {
@@ -222,5 +244,5 @@
     background-size: 300% 101%;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: textShineAuthor 13s ease-out infinite;
+    animation: textShineAuthor 11s ease-out infinite;
 }

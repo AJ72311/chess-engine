@@ -95,7 +95,7 @@ function App() {
                         ${isIlluminated ? styles.illuminated : ''}
                     `}
                     data-tooltip={
-                        'The name "Quieceros" was inspired by quiescence search: a selective extension to an alpha-beta search for tactical positions. Implementing quiescence search was my favorite part of developing this engine!'
+                        'Quieceros is named after quiescence search, a selective extension to alpha-beta search that mitigates tactical errors at volatile leaf nodes. Building the quiescence routine was my favorite part of development!'
                     }
                 >
                     <img src={EngineLogo} alt="Engine Logo" className={styles.icon} />

@@ -5,6 +5,8 @@ book.bin
 syzygy-tables/
 /node_modules
 
+.env
+
 # Logs
 logs
 *.log

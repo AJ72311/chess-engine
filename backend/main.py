@@ -1,12 +1,17 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from routers import game_router
 from services import game_service
 from contextlib import asynccontextmanager
 import multiprocessing
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- constants ---
-NUM_WORKERS = 8   # the number of engine instances
-MAX_SESSIONS = 8  # concurrent session cap  
+NUM_WORKERS = int(os.getenv('NUM_WORKERS', '8'))     # the number of engine instances
+MAX_SESSIONS = int(os.getenv('MAX_SESSIONS', '8'))   # concurrent session cap  
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,6 +53,21 @@ async def lifespan(app: FastAPI):
     print('Server shutdown complete')
 
 app = FastAPI(lifespan=lifespan)
+
+origins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://quieceros-chess.netlify.app',
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
 app.include_router(game_router.router, prefix='/game')
 
 @app.get('/')
