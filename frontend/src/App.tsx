@@ -1,15 +1,56 @@
 import Game from './components/Game/Game';
 import GithubLogo from './assets/github.svg';
 import EngineLogo from './assets/icon.svg';
+import PythonLogo from './assets/python.svg';
 import styles from './App.module.css';
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 
 function App() {
     const [isIlluminated, setIsIlluminated] = useState<boolean>(false);
     const [startupCountdown, setStartupCountdown] = useState<number>(5);
+    const [serverStatus, setServerStatus] = useState<string>('checking');
+    const [isStartingUp, setIsStartingUp] = useState<boolean>(false);
 
     useEffect(() => {
-        if (isIlluminated) return;
+        const checkServerStatus = async () => {
+            try {
+                const { data } = await axios.get('/game/status');
+                setServerStatus(data.status);
+                
+                // if the status is good, start the startup sequence.
+                if (data.status === 'ok' || data.status === 'heavy_load') {
+                    setIsStartingUp(true);
+                }
+
+            } catch (err) {
+                console.error('Failed to check server status: ', err);
+                setServerStatus('error');
+            }
+        };
+        checkServerStatus();
+    }, []);
+
+    // runs on component mount to check server capacity
+    useEffect(() => {
+        const checkServerStatus = async () => {
+            try {
+                const { data } = await axios.get('/game/status');
+                setServerStatus(data.status);  // 'ok', 'heavy_load', or 'busy'
+
+            } catch (err) {
+                console.error('Failed to check server status: ', err);
+                setServerStatus('error');
+            }
+        };
+
+        checkServerStatus();
+    }, []);
+
+    useEffect(() => {
+        if (isIlluminated || !isStartingUp) {
+            return;
+        }
 
         const interval = setInterval(() => {
             setStartupCountdown(prev => {
@@ -24,10 +65,28 @@ function App() {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [isIlluminated]);
+    }, [isIlluminated, isStartingUp]);
 
     return (
-        <div className={styles.appContainer}>
+            <div className={styles.appContainer}>
+                <div className={`${styles.topLeftText} ${isIlluminated ? styles.illuminated : ''}`}
+            >
+                <span className={
+                    `${styles.engineName} ${isIlluminated ? styles.illuminated : ''}`
+                }>
+                    Quieceros
+                </span>
+                <span> &mdash; </span>
+                <img 
+                    src={PythonLogo} 
+                    alt="Python Logo" 
+                    className={styles.inlineLogo} 
+                />
+                <span className={`${styles.authorNameBlock} ${isIlluminated ? styles.illuminated : ''}`}>
+                    <span> Chess Engine by </span>
+                    <i>AJ Yaseen</i>
+                </span>
+            </div>
             <div className={styles.iconsContainer}>
                 <a
                     href="#"
@@ -56,7 +115,9 @@ function App() {
             </div>
             <Game 
                 isIlluminated={isIlluminated}
-                startupCountdown={startupCountdown}
+                startupCountdown={serverStatus === 'checking' ? 0 : startupCountdown}
+                initialServerStatus={serverStatus}
+                isStartingUp={isStartingUp}
             />
         </div>
     );
