@@ -32,9 +32,9 @@ Quieceros is the centerpiece of the project. It was designed with a focus on imp
 
 ### Board Representation
 The engine utilizes a **10x12 Mailbox array** for its board representation, with out-of-bounds sentinel squares to eliminate the need for bounds-checking during move generation. An additional set of **Piece Lists** is maintained to allow O(1) access to piece indices, avoiding costly full-board scans. This representation was chosen over the conventionally-faster bitboard approach for a few key reasons:
-    1. **High Overhead of Bitwise Operations**: Standard bitwise operations (scans, masks, shifts, etc.) are not nearly as well-optimized in Python as they are in compiled languages and carry significant overhead<br>  
-    2. **Lack of Low-Level Optimizations**: Python doesn't support the low-level CPU intrinsics (`POPCNT`) and vectorized operations (`SIMD`) that make bitboards efficient in compiled languages<br>  
-    3. **Highly Optimized Native Types**: Python's list/dict access is written in C and heavily optimized
+1. **High Overhead of Bitwise Operations**: Standard bitwise operations (scans, masks, shifts, etc.) are not nearly as well-optimized in Python as they are in compiled languages and carry significant overhead 
+2. **Lack of Low-Level Optimizations**: Python doesn't support the low-level CPU intrinsics (`POPCNT`) and vectorized operations (`SIMD`) that make bitboards efficient in compiled languages 
+3. **Highly Optimized Native Types**: Python's list/dict access is written in C and heavily optimized
 
 These factors make the performance benefits of bitboards minimal in Python, while the complexity of implementing them remains high.
 
@@ -44,9 +44,9 @@ The game tree is traversed through the Board class's `make_move` and `unmake_mov
 A cornerstone of this engine's move generation algorithm is its **static legality checking**, where the legality of pseudo-legal moves is verified *without* making any `make_move` or `unmake_move` calls. The popular alternative to this is to employ a "make-test-unmake" cycle, where each pseudo-legal move is made on the board to test if it allows the king to be captured. While the make-test-unmake pattern is simpler, it incurs a prohibitive performance penalty in Python due to the interpreter's high function call overhead, making the static approach more favorable for this application.
 
 The move generator follows a 3-stage pipeline:
-    1. **Pseudo-Legal Move Generation**: Uses index deltas to generate all potential piece target squares
-    2. **Threat & Pin Analysis**: Performs ray-walks from the king to detect any absolute pins on friendly pieces. An enemy threat map is also generated to count checks and identify illegal destination squares for the king
-    3. **Validation**: Pseudo-legal moves generated in stage 1 are filtered against the pin and threat constraints identified in stage 2
+1. **Pseudo-Legal Move Generation**: Uses index deltas to generate all potential piece target squares
+2. **Threat & Pin Analysis**: Performs ray-walks from the king to detect any absolute pins on friendly pieces. An enemy threat map is also generated to count checks and identify illegal destination squares for the king
+3. **Validation**: Pseudo-legal moves generated in stage 1 are filtered against the pin and threat constraints identified in stage 2
 
 ### Search Algorithm
 The search revolves around a fail-soft alpha-beta framework and layers on the following optimizations:
