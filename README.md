@@ -1,7 +1,5 @@
 # Quieceros: A Python Chess Engine & Web Application
 
-<br>
-
 ## Table of Contents
 - [Overview](#overview)
 - [Live Demo](#live-demo)
@@ -72,8 +70,6 @@ The static evaluation starts with a baseline material count and makes adjustment
 - **Positional Heuristics**: Includes tapered bonuses and penalties for piece mobility, king safety (pawn shield, nearby attacks), central control, castling rights, and piece development
 
 ## Application Architecture
-
-<br>
 
 ### Tech Stack
 - **Engine & Backend**: Python 3, PyPy3, FastAPI, Uvicorn, Gunicorn, Nginx
