@@ -2,10 +2,10 @@
 
   <defs>
     <clipPath id="clip-left">
-      <rect x="0" y="0" width="220" height="512" />
+      <rect x="0" y="0" width="270" height="512" />
     </clipPath>
     <clipPath id="clip-right">
-      <rect x="220" y="0" width="295" height="512" />
+      <rect x="270" y="0" width="245" height="512" />
     </clipPath>
   </defs>
 

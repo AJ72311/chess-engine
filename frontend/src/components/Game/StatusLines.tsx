@@ -68,7 +68,7 @@ const EASTER_EGGS = [
     "I'm not depth-limited, you are!",
     '"The board is my canvas, the blunder, my brush!"',
     '"Speak softly, and carry a big evaluation function."',
-    'Give me liberty, or give me... more time!',
+    '"Give me liberty, or give me... more time!"',
     'Pretending to have a "gut feeling"...',
 ];
 
