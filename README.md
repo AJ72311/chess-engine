@@ -32,8 +32,8 @@ Quieceros is the centerpiece of the project. It was designed with a focus on imp
 
 ### Board Representation
 The engine utilizes a **10x12 Mailbox array** for its board representation, with out-of-bounds sentinel squares to eliminate the need for bounds-checking during move generation. An additional set of **Piece Lists** is maintained to allow O(1) access to piece indices, avoiding costly full-board scans. This representation was chosen over the conventionally-faster bitboard approach for a few key reasons:
-    1. **High Overhead of Bitwise Operations**: Standard bitwise operations (scans, masks, shifts, etc.) are not nearly as well-optimized in Python as they are in compiled languages and carry significant overhead
-    2. **Lack of Low-Level Optimizations**: Python doesn't support the low-level CPU intrinsics (`POPCNT`) and vectorized operations (`SIMD`) that make bitboards efficient in compiled languages
+    1. **High Overhead of Bitwise Operations**: Standard bitwise operations (scans, masks, shifts, etc.) are not nearly as well-optimized in Python as they are in compiled languages and carry significant overhead<br>  
+    2. **Lack of Low-Level Optimizations**: Python doesn't support the low-level CPU intrinsics (`POPCNT`) and vectorized operations (`SIMD`) that make bitboards efficient in compiled languages<br>  
     3. **Highly Optimized Native Types**: Python's list/dict access is written in C and heavily optimized
 
 These factors make the performance benefits of bitboards minimal in Python, while the complexity of implementing them remains high.
