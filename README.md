@@ -1,5 +1,11 @@
 # Quieceros: A Python Chess Engine & Web Application
 
+![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
+![Live Demo](https://img.shields.io/badge/Live%20Demo-%F0%9F%9A%80-brightgreen?style=flat)
+
 ## Table of Contents
 - [Overview](#overview)
 - [Live Demo](#live-demo)
