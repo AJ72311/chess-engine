@@ -11,7 +11,16 @@
     }
 }
 
-@keyframes twinkle {
+@keyframes fadeInText {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 0.7;
+    }
+}
+
+@keyframes twinkleGitHub {
     0%, 3%, 6%, 9%, 100% {
         opacity: 0.4;
         transform: scale(1);
@@ -19,6 +28,27 @@
     1.5%, 4.5%, 7.5% {
         opacity: 0.8;
         transform: scale(1.1);
+    }
+}
+
+@keyframes twinkleEngine {
+    0%, 3%, 6%, 9%, 100% {
+        opacity: 0.4;
+        transform: scale(1.15);
+    }
+    1.5%, 4.5%, 7.5% {
+        opacity: 0.8;
+        transform: scale(1.3); 
+    }
+}
+
+
+@keyframes textShineAnimation {
+    from {
+        background-position: -200% center;
+    }
+    to {
+        background-position: 200% center;
     }
 }
 
@@ -39,15 +69,25 @@
 }
 
 .icon {
-    width: 45px; 
+    width: 35px; 
     height: auto; 
     opacity: 0;
     transition: opacity 0.3s ease-in-out, filter 0.1s ease-in-out;
 }
 
+.engineIconLink .icon {
+    transform: scale(1.15);
+}
+
+
 .iconLink.illuminated .icon {
     animation: fadeInLogo 1.5s forwards, 
-               twinkle 30s 1.5s infinite;
+               twinkleGitHub 30s 1.5s infinite;
+}
+
+.engineIconLink.illuminated .icon {
+    animation: fadeInLogo 1.5s forwards, 
+               twinkleEngine 30s 1.5s infinite;
 }
 
 .iconLink:hover .icon {
@@ -56,15 +96,11 @@
 }
 
 .engineIconLink:hover .icon {
-    filter: drop-shadow(0 0 8px #216e3c);
+    filter: drop-shadow(0 0 1px #652f48);
 }
 
 .engineIconLink {
     cursor: default;
-}
-
-.githubIconLink:hover .icon {
-    filter: drop-shadow(0 0 1px white);
 }
 
 .iconLink[data-tooltip]::before {
@@ -78,7 +114,7 @@
     color: #fff;
     padding: 8px 12px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 11px;
 
     opacity: 0;
     visibility: hidden;
@@ -88,7 +124,7 @@
 
 .engineIconLink[data-tooltip]::before {
     white-space: normal; 
-    width: 405px; 
+    width: 400px;
 }
 
 .githubIconLink[data-tooltip]::before {
@@ -117,4 +153,96 @@
 .iconLink[data-tooltip]:hover::after {
     opacity: 1 !important;
     visibility: visible;
+}
+
+.topLeftText {
+    display: inline-block;
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: white; 
+    z-index: 1000;
+    font-family: 'Tahoma', Arial, sans-serif;
+    font-size: 12px; 
+    opacity: 0;
+}
+
+.topLeftText i {
+    font-style: italic;
+    padding-right: 2px;
+}
+
+.topLeftText .engineName {
+    color: #d4615f;
+}
+
+.topLeftText.illuminated {
+    animation: fadeInText 1.5s forwards;
+}
+
+.inlineLogo {
+    height: 1.5em; 
+    width: auto; 
+    vertical-align: middle;
+    margin-left: 0.3em;
+    margin-right: 0.3em;
+    position: relative;
+    top: -1px; 
+}
+
+@keyframes textShineEngine {
+    0% {
+        background-position: 100% 0;
+    }
+    8.33% {
+        background-position: 0% 0;
+    }
+    100% {
+        background-position: 0% 0;
+    }
+}
+
+@keyframes textShineAuthor {
+    0% {
+        background-position: 100% 0;
+    }
+    8.33% {
+        background-position: 100% 0;
+    }
+    16.66% {
+        background-position: 0% 0;
+    }
+    100% {
+        background-position: 0% 0;
+    }
+}
+
+.engineName.illuminated {
+    color: transparent;
+    background: 
+    linear-gradient(
+        110deg,
+        #8f84c1 40%,
+        #fff     50%,
+        #b9576f 60%
+    );
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: textShineEngine 11s ease-out infinite;
+}
+
+.authorNameBlock.illuminated {
+    color: transparent;
+    background: linear-gradient(
+        110deg,
+        #ccc 40%,
+        #fff 50%,
+        #ccc 60%
+    );
+    background-size: 300% 101%;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: textShineAuthor 11s ease-out infinite;
 }

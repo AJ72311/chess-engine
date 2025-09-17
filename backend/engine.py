@@ -7,7 +7,8 @@ import time
 # for opening book
 import chess
 import chess.polyglot
-from utils import board_to_fen, move_to_algebraic
+import random
+from utils import board_to_fen, move_to_algebraic   # move_to_algebraic used in commented debug prints
 from utils import parse_user_move
 
 # ----------------------------------- GLOBAL CONSTANTS -----------------------------------
@@ -715,7 +716,7 @@ class Search:
                 
             return min_eval
 
-# helper function, retreives a move from the opening book if available
+# helper function, retreives a random move from the opening book if available
 # returns the book move in UCI format if found, otherwise None
 def get_book_move(position, book_path='book.bin'):
     try:
@@ -723,12 +724,15 @@ def get_book_move(position, book_path='book.bin'):
             fen = board_to_fen(position) # convert the board representation to fen format
             board = chess.Board(fen)     # create a python-chess board using the fen
 
-            # find the best weighted move for the position
-            entry = reader.find(board)
-            book_move = entry.move
+            # get all book moves for the position
+            entries = list(reader.find_all(board))
+            if not entries:
+                return None
 
-            # return the book move in uci format (e.g. e2e4)
-            print(f'Book move found: {book_move.uci()}')
+            # weighted random choice based on entry weights
+            moves = [entry.move for entry in entries]
+            weights = [entry.weight for entry in entries]
+            book_move = random.choices(moves, weights=weights, k=1)[0]
             return book_move.uci()
 
     except (FileNotFoundError):

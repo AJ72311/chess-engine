@@ -4,20 +4,98 @@ from move_generator import generate_moves
 from utils import board_to_fen, move_to_algebraic, parse_user_move
 import uuid
 import time
+import traceback
 
-active_sessions = {}    # store a Board and Seach instance for each on-going game, indexed by a uuid
+# --- constants ---
 ENGINE_THINK_TIME = 6   # engine think time capped at 6 seconds
+SESSION_TIMEOUT = 900   # 15 minutes
 
-# creates a new active session and initializes the Board and Search instances
-def new_game(player_move: str | None):
+def run_worker(task_queue, result_dict):    
+    """
+    The main loop for a worker process.
+
+    Args:
+        task_queue (multiprocessing.Queue): the queue to receive tasks from
+        results_dict (multiprocessing.Dict): shared dict to put results in
+    """
+
+    # worker's private memory, mapping a Board and Search instance to each assigned session
+    active_sessions = {}
+    print('Chess worker process started')
+
+    while True:
+        try:
+            # blocking call, worker sleeps here until a task arrives
+            task_id, command, kwargs = task_queue.get()
+
+            # --- new_game task ---
+            if command == 'new_game':
+                _prune_inactive_sessions(active_sessions)
+
+                result = _new_game(active_sessions, **kwargs)
+                result_dict[task_id] = ('ok', result)
+
+            # --- play_move task ---
+            elif command == 'play_move':
+                result = _play_move(active_sessions, **kwargs)
+                result_dict[task_id] = ('ok', result)
+
+            # --- prune_sessions task
+            elif command == 'prune_sessions':
+                sessions_before = len(active_sessions)
+                _prune_inactive_sessions(active_sessions)
+                sessions_after = len(active_sessions)
+
+                pruned_count = sessions_before - sessions_after
+                result_dict[task_id] = ('ok', pruned_count)
+
+            # --- prune_single_session task ---
+            elif command == 'prune_single_session':
+                target_id = kwargs.get('session_id')
+                if target_id in active_sessions:
+                    print(f'Pruning session {target_id} due to client unload')
+                    del active_sessions[target_id]
+
+            else:
+                result_dict[task_id] = ('error', 'Unknown command')
+        
+        except Exception as e:
+            # safety net, prevents dispatcher from waiting forever for a response
+            print(f'An error occurred in a worker process: {e}')
+            traceback.print_exc()
+
+            # check if task_id was defined before writing to result_dict
+            if 'task_id' in locals():
+                result_dict[task_id] = ('error', str(e))
+
+def _prune_inactive_sessions(active_sessions):
+    """Iterates through active_sessions and prunes any sessions that have timed out."""
+
+    current_time = time.time()
+
+    # get all uuids corresponding to timed-out sessions
+    timed_out_sessions = [
+        game_id for game_id, session in active_sessions.items()
+        if (current_time - session['last_activity']) > SESSION_TIMEOUT
+    ]
+
+    # prune all timed-out uuids
+    for game_id in timed_out_sessions:
+        print(f'Pruning inactive session: {game_id}')
+        del active_sessions[game_id]
+
+def _new_game(active_sessions, player_move: str | None):
+    """Creates a new active session and initializes the Board and Search instances."""
+
     board = Board()
     search = Search(depth=64)
     game_id = str(uuid.uuid4())
-
-    # store new game in active sessions
+    
+    # create a new game in sessions dict
     active_sessions[game_id] = {
         'search': search,
         'board': board,
+        'last_activity': time.time(),
     }
 
     # if applicable, make the player's move first
@@ -26,6 +104,8 @@ def new_game(player_move: str | None):
 
     # computer's turn
     move_info = _play_engine_turn(board, search, ENGINE_THINK_TIME)
+
+    active_sessions[game_id]['last_activity'] = time.time()
     
     # return the session id, along with the computer's move information and new FEN
     return (
@@ -34,13 +114,16 @@ def new_game(player_move: str | None):
         game_id,
     )
 
-# receives player's move from frontned, plays it, and returns FEN with response
-def play_move(player_move: str, session_id: str, client_fen: str):
+def _play_move(active_sessions, player_move: str, session_id: str, client_fen: str):
+    """Receives player's move from frontend, plays it, and returns FEN with response."""
+
+    board = None
+    search = None
+
     # get this session's board and search instances
     session_data = active_sessions.get(session_id)
-    
     if not session_data:
-        raise KeyError('Invalid session ID')
+        raise KeyError('Invalid or expired session ID')
     
     board = session_data['board']
     search = session_data['search']
@@ -56,6 +139,8 @@ def play_move(player_move: str, session_id: str, client_fen: str):
     # play the engine's response
     move_info = _play_engine_turn(board, search, ENGINE_THINK_TIME)
     new_fen = board_to_fen(board)
+
+    session_data['last_activity'] = time.time()
 
     # return the updated FEN and move information
     return (

@@ -3,7 +3,7 @@ import { Chessboard } from 'react-chessboard';
 import { Chess, type Square } from 'chess.js';
 import { StatusLines } from './StatusLines'
 import styles from './Game.module.css';
-import axios from 'axios';
+import apiClient from '../../api.ts';
 import Odometer from 'react-odometerjs';
 import 'odometer/themes/odometer-theme-default.css';
 
@@ -11,10 +11,14 @@ type SquareStyles = Partial<Record<Square, CSSProperties>>;
 
 function Game({
     isIlluminated,
-    startupCountdown
+    startupCountdown,
+    initialServerStatus,
+    isStartingUp,
 } : {
     isIlluminated: boolean
     startupCountdown: number
+    initialServerStatus: string
+    isStartingUp: boolean
 }) {
     // create a chess.js instance using ref to maintain game state across renders
     const chessGameRef = useRef(new Chess());
@@ -32,6 +36,7 @@ function Game({
 
     // used to track the session with the engine's api
     const [sessionID, setSessionID] = useState<string | null>(null);
+    const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [countdown, setCountdown] = useState<number>(0);
     const [positionsSearched, setPositionsSearched] = useState<number>(0);
@@ -40,7 +45,81 @@ function Game({
 
     // used to animate odometer when going from a book move to a normal one
     const [odometerPositions, setOdometerPositions] = useState<number>(0);
-    const [odometerDepth, setOdometerDepth] = useState<number>(0);   
+    const [odometerDepth, setOdometerDepth] = useState<number>(0);  
+    
+    // used to track server status and messages
+    const [serverStatus, setServerStatus] = useState<string>(initialServerStatus);
+    const [serverMessage, setServerMessage] = useState<{ type: string, text: string }>({ type: 'info', text: '' });
+
+    // update the local serverStatus when its prop changes
+    useEffect(() => {
+        setServerStatus(initialServerStatus);
+    }, [initialServerStatus]);
+
+    // refs to hold Ids for setTimeout calls for session expiration
+    const timeoutWarningRef = useRef<number | null>(null);
+    const timeoutExpirationRef = useRef<number | null>(null);
+
+    // resets session timeout timers, called after each player move
+    const resetTimeoutTimer = useCallback(() => {
+        // clear existing timers
+        if (timeoutWarningRef.current) clearTimeout(timeoutWarningRef.current);
+        if (timeoutExpirationRef.current) clearTimeout(timeoutExpirationRef.current);
+
+        // clear lingering timeout messages
+        setServerMessage({ type: 'info', text: '' });
+        setIsSessionExpired(false);
+
+        // set a new warning timer for 10 minutes (600,000 milliseconds)
+        timeoutWarningRef.current = setTimeout(() => {
+            setServerMessage({ 
+                type: 'warning',
+                text: 'Session will expire in 5 minutes due to inactivity, play a move!',
+            });
+        }, 600 * 1000);
+
+        // set a new expiration timer for 15 minutes (900,000 milliseconds)
+        timeoutExpirationRef.current = setTimeout(() => {
+            setServerMessage({
+                type: 'error',
+                text: 'Session has expired, reload to start a new game!',
+            });
+
+            // invalidate sessionID on the client side
+            setSessionID(null);
+            setIsSessionExpired(true);
+        }, 900 * 1000);
+    }, []);
+
+    // cleanup timers on component unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutWarningRef.current) clearTimeout(timeoutWarningRef.current);
+            if (timeoutExpirationRef.current) clearTimeout(timeoutExpirationRef.current);
+        };
+    }, []); 
+
+    // handles pruning the session on the backend when the user closes the tab / reloads
+    useEffect(() => {
+        const handleUnload = () => {
+            if (sessionID) {
+                const payload = { 'session_id': sessionID };
+
+                // sendBeacon requires blob format
+                const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+
+                navigator.sendBeacon('/game/prune-session', blob);
+            }
+        };
+
+        window.addEventListener('beforeunload', handleUnload);
+
+        // clean up when component unmounts to prevent memory leaks
+        return () => {
+            window.removeEventListener('beforeunload', handleUnload);
+        };
+
+    }, [sessionID]);
 
     // briefly set odometer values to 0 to ensure animation when transitioning from "Book Move" string
     const wasBookMoveRef = useRef<boolean>(false);
@@ -72,6 +151,11 @@ function Game({
     const handleMove = useCallback(async (playerMove: string) => {
         // get the engine's reply
         setIsLoading(true);
+
+        // used to enforce a minimum 100ms load time for smooth move animations
+        const startTime = Date.now();
+        const minLoadTime = 335  // 500 milliseconds
+
         try {
             const endpoint = sessionID ? '/game/play-move' : '/game/new-game';
             const payload = sessionID
@@ -83,7 +167,15 @@ function Game({
                 'player_move': playerMove,
             }
 
-            const data = await axios.post(endpoint, payload);
+            const data = await apiClient.post(endpoint, payload);
+
+            // ensure a minmum load time has passed for smooth move animations
+            const elapsedTime = Date.now() - startTime;
+            const delayNeeded = minLoadTime - elapsedTime;
+
+            if (delayNeeded > 0) {
+                await new Promise(resolve => setTimeout(resolve, delayNeeded));
+            }
 
             // unpack response
             const newFEN = data.data.new_fen;
@@ -92,6 +184,10 @@ function Game({
             const nodesSearched = data.data.nodes_searched;
             const gameID = data.data.game_id ? data.data.game_id : null; // gameID only in /new-game
             setIsBookMove(data.data.is_book);
+
+            if (data.data.server_status) {
+                setServerStatus(data.data.server_status)
+            }
 
             const result = chessGame.move(movePlayed);
             // safety check: if move was illegal, log  error and load the returned FEN
@@ -125,13 +221,29 @@ function Game({
                 return; 
             }
         
-        } catch (error) {
-            throw error;
+        } catch (error: any) {
+            if (error.response && error.response.status === 503) {
+                setServerMessage({
+                    type: 'error',
+                    text: 'Server is at maximum concurrent game capacity, please check again in a few minutes.'
+                });
+                setServerStatus('busy');
+            }
+
+            if (error.response && error.response.status === 404) {
+                setServerMessage({
+                    type: 'error',
+                    text: 'Session has expired, reload to start a new game!',
+                });
+                setSessionID(null);
+            }
+
+            throw error;  // re-throw for onDrop / onSquareClick to catch
         
         } finally {
             setIsLoading(false)
         }
-    }, [sessionID, boardPosition]);
+    }, [sessionID, boardPosition, chessGame]);
 
     // helper function for useEffect, finds king index to highlight in red for checks
     function findKingSquare(color: 'w' | 'b'): Square {
@@ -273,6 +385,9 @@ function Game({
                 promotion: 'q', // always promote to queen for simplicity
             });
 
+            // reset session timeout timers
+            resetTimeoutTimer();
+
             // if the move succeeded
             setBoardPosition(chessGame.fen());
             setLastMoveHighlight(highlightFromUCI(`${sourceSqr}${destinationSqr}${result.promotion??''}`));
@@ -304,7 +419,7 @@ function Game({
             // if the move failed
             return false;
         }
-    }, [chessGame, handleMove]);
+    }, [chessGame, handleMove, resetTimeoutTimer]);
 
     const onDragEnd = useCallback(() => {
         // user released outside valid square or cancelled drag, reset valid move options
@@ -357,6 +472,9 @@ function Game({
                 promotion: 'q', // always promote to queen for simplicity
             });
 
+            // reset session timeout timers
+            resetTimeoutTimer();
+
             // if move succeeded
             setBoardPosition(chessGame.fen());
             setLastMoveHighlight(highlightFromUCI(`${moveFrom}${square}${result.promotion??''}`));
@@ -398,10 +516,15 @@ function Game({
             // return early
             return;
         }
-    }, [chessGame, moveFrom, handleMove]);
+    }, [chessGame, moveFrom, handleMove, resetTimeoutTimer]);
 
     return (
         <div className={styles.container}>
+            {/* {(serverStatus === 'heavy_load' || serverStatus === 'busy') && !gameOver && isIlluminated && (
+                <div className={styles.heavyLoadIndicator}>
+                    Server is under heavy load. Move quality may be reduced.
+                </div>
+            )} */}
             <div className={styles.chessboardContainer}>
                 <div className={`${styles.statusWrapper} ${isIlluminated ? styles.illuminated : ''}`}>
                     <StatusLines 
@@ -409,6 +532,10 @@ function Game({
                         isLoading={isLoading}
                         isIlluminated={isIlluminated}
                         countdown={startupCountdown > 0 ? startupCountdown : countdown}
+                        serverStatus={serverStatus}
+                        serverMessage={serverMessage}
+                        sessionID={sessionID}
+                        isStartingUp={isStartingUp}
                     />
                 </div>
                 <div className={`${styles.engineInfo} ${isIlluminated ? styles.illuminated : ''}`}>
@@ -451,8 +578,18 @@ function Game({
                     <Chessboard 
                         position={boardPosition}
                         onPieceDrop={onDrop}
-                        onSquareClick={(isLoading || !isIlluminated) ? undefined : onSqrClick}
-                        arePiecesDraggable={!isLoading && isIlluminated}
+                        onSquareClick={
+                            (
+                                isLoading || !isIlluminated || gameOver || isSessionExpired 
+                                || (sessionID === null && serverStatus === 'busy')
+                            ) 
+                            ? undefined 
+                            : onSqrClick
+                        }
+                        arePiecesDraggable={
+                            !isLoading && isIlluminated && !gameOver && !isSessionExpired
+                            && (sessionID !== null || serverStatus !== 'busy')
+                        }
                         customSquareStyles={{
                             ...optionSquares,
                             ...checkHighlight,
@@ -474,7 +611,7 @@ function Game({
                 <div 
                     className={`
                         ${styles.statusIndicator} 
-                        ${(isLoading || !isIlluminated || gameOver) ? styles.statusBusy : ''}
+                        ${(isLoading || !isIlluminated || gameOver || isSessionExpired) ? styles.statusBusy : ''}
                     `}
                 ></div>
             </div>

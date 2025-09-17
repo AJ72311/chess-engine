@@ -24,3 +24,10 @@ class PlayMoveResponse(BaseModel):
     depth_reached: int | None
     nodes_searched: int | None
     is_book: bool
+    server_status: str  # 'ok', 'heavy_load', or 'busy'
+
+class StatusResponse(BaseModel):
+    status: str
+
+class PruneRequest(BaseModel):
+    session_id: str
