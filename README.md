@@ -28,7 +28,7 @@ Quieceros is a feature-rich chess engine built from the ground up using Python. 
 
 ## Live Demo
 
-Play against Quieceros here: https://quieceros-chess.vercel.app
+Play against Quieceros here: https://quieceros.com
 
 ## Key Stats
 - **Estimated Elo**: ~1700-1800 Chess.com blitz
