@@ -3,7 +3,7 @@ import { Chessboard } from 'react-chessboard';
 import { Chess, type Square } from 'chess.js';
 import { StatusLines } from './StatusLines'
 import styles from './Game.module.css';
-import axios from 'axios';
+import apiClient from '../../api.ts';
 import Odometer from 'react-odometerjs';
 import 'odometer/themes/odometer-theme-default.css';
 
@@ -167,7 +167,7 @@ function Game({
                 'player_move': playerMove,
             }
 
-            const data = await axios.post(endpoint, payload);
+            const data = await apiClient.post(endpoint, payload);
 
             // ensure a minmum load time has passed for smooth move animations
             const elapsedTime = Date.now() - startTime;

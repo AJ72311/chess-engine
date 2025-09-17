@@ -4,7 +4,7 @@ import EngineLogo from './assets/icon.svg';
 import PythonLogo from './assets/python.svg';
 import styles from './App.module.css';
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from './api.ts';
 
 function App() {
     const [isIlluminated, setIsIlluminated] = useState<boolean>(false);
@@ -15,7 +15,7 @@ function App() {
     useEffect(() => {
         const checkServerStatus = async () => {
             try {
-                const { data } = await axios.get('/game/status');
+                const { data } = await apiClient.get('/game/status');
                 setServerStatus(data.status);
                 
                 // if the status is good, start the startup sequence.
@@ -35,7 +35,7 @@ function App() {
     useEffect(() => {
         const checkServerStatus = async () => {
             try {
-                const { data } = await axios.get('/game/status');
+                const { data } = await apiClient.get('/game/status');
                 setServerStatus(data.status);  // 'ok', 'heavy_load', or 'busy'
 
             } catch (err) {

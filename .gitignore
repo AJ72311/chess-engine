@@ -2,10 +2,10 @@ __pycache__/
 venv/
 book.bin
 
-syzygy-tables/
 /node_modules
 
 .env
+frontend/.env.development
 
 # Logs
 logs
