@@ -178,69 +178,7 @@ async def play_move(request: Request, play_move_req: PlayMoveRequest):
 async def getStatus(request: Request):
     """Lets frontend know if server is at max concurrency limit, under heavy load, or at normal capacity."""
 
-    loop = asyncio.get_running_loop()
-
-    # get all necessary shared state objects
-    session_count = request.app.state.session_count
-    worker_load = request.app.state.worker_load
-    task_queues = request.app.state.task_queues
-    results_dict = request.app.state.results_dict
-    session_count_lock = request.app.state.session_count_lock
-
-    def trigger_prune():
-        # dispatch a 'prune_sessions' task to all workers
-        prune_task_ids = {}
-        for i in range(NUM_WORKERS):
-            task_id = uuid.uuid4().hex
-            prune_task_ids[i] = task_id
-            task_queues[i].put((task_id, 'prune_sessions', {}))
-
-        # wait for all workers to respond
-        pruned_counts = {}  # map worker_id to its pruned_count
-        start_time = time.time()
-        while len(pruned_counts) < NUM_WORKERS:
-            if time.time() - start_time > WORKER_TIMEOUT:
-                raise TimeoutError('Timed-out waiting for workers to prune sessions')
-            
-            # check for results from workers that haven't responded yet
-            for worker_id, task_id in prune_task_ids.items():
-                if worker_id not in pruned_counts and task_id in results_dict:
-                    status, result_data = results_dict.pop(task_id)
-
-                    if status == 'ok':
-                        pruned_counts[worker_id] = result_data
-                    else:
-                        # if a worker fails, assume it pruned 0
-                        pruned_counts[worker_id] = 0
-
-            time.sleep(0.01)
-
-        # atomically update global counters
-        total_pruned = 0
-        with session_count_lock:
-            for worker_id, count in pruned_counts.items():
-                if count > 0:
-                    worker_load[worker_id] -= count
-
-                    # ensure worker_load can never go below 0
-                    if worker_load[worker_id] < 0:
-                        worker_load[worker_id] = 0
-
-                    total_pruned += count
-            
-            # decrement global sessions count
-            session_count.value -= total_pruned
-            if session_count.value < 0:
-                session_count.value = 0
-
-    try:
-        await loop.run_in_executor(None, trigger_prune)
-    except Exception as e:
-        print(f'An error occurred during session pruning: {e}')
-        raise HTTPException(status_code=500, detail='Failed to prune inactive sessions')
-    
-    current_count = session_count.value
-
+    current_count = request.app.state.session_count.value
     if current_count >= MAX_SESSIONS:
         return StatusResponse(status='busy')
     # the point at which SMT will be needed (assuming max. 2 workers per logical core)
