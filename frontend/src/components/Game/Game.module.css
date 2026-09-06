@@ -4,6 +4,7 @@
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .chessboardContainer {
@@ -95,6 +96,7 @@
 
 .engineStats {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     color: white;
     font-size: 14px;
@@ -105,14 +107,24 @@
 
 .stat {
     display: inline-flex;
-    align-items: center; 
+    align-items: center;
+    white-space: nowrap;
 }
 
 .odometerInline {
     display: inline-block;
-    vertical-align: middle; 
-    margin-left: 0.2rem;  
-    line-height: 1;      
+    vertical-align: middle;
+    margin-left: 0;
+    line-height: 1;
+}
+
+/* Centering wrapper for the rotating status message. On narrow screens it also gets a
+   fixed min-height (see media query) so a wrapped line can't shove the board up/down. */
+.messageSlot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
 }
 
 .spinner {
@@ -156,4 +168,144 @@
 
 .illuminated .countdown, .illuminated .message {
     color: white;
+}
+
+/* "Quieceros" in the pre-illumination welcome line (~3s): four blobs of cherry-red and violet that
+   orbit through the letters on different phases/directions, so pockets of colour keep welling
+   up and fading out at different points — a continuous "boil", never a left-to-right sweep.
+   Same palette as the brand wordmark (#b9576f cherry, #d4615f coral, #8f84c1 violet, plum). */
+.welcomeBoil {
+    background-image:
+        radial-gradient(closest-side circle at 50% 50%, #b9576f 0%, rgba(185, 87, 111, 0) 74%),
+        radial-gradient(closest-side circle at 50% 50%, #d4615f 0%, rgba(212, 97, 95, 0) 74%),
+        radial-gradient(closest-side circle at 50% 50%, #8f84c1 0%, rgba(143, 132, 193, 0) 74%),
+        radial-gradient(closest-side circle at 50% 50%, #6a4b9c 0%, rgba(106, 75, 156, 0) 72%),
+        linear-gradient(120deg, #5a3a63, #b9576f, #8f84c1, #d4615f);
+    background-size:
+        180% 180%,
+        170% 170%,
+        185% 185%,
+        150% 150%,
+        320% 320%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation:
+        welcomeBoil 2.6s linear infinite,
+        welcomePulse 2.1s ease-in-out infinite;
+    will-change: background-position, filter;
+}
+
+/* "New Game?" call-to-action after a game-over line — inline, inherits the boil (add
+   .welcomeBoil alongside), reloads the page on click */
+.newGameBtn {
+    margin-left: 0.4em;
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* each layer follows its own closed orbit (last stop == first stop) so linear timing loops
+   with no pause; the four blobs use different centres, radii, directions and phases */
+@keyframes welcomeBoil {
+    0% {
+        background-position: 55% 8%, 93% 52%, 4% 50%, 70% 48%, 0% 50%;
+    }
+    25% {
+        background-position: 97% 50%, 48% 7%, 50% 4%, 48% 70%, 50% 30%;
+    }
+    50% {
+        background-position: 55% 92%, 3% 52%, 96% 50%, 26% 48%, 100% 60%;
+    }
+    75% {
+        background-position: 13% 50%, 48% 97%, 50% 96%, 48% 26%, 40% 45%;
+    }
+    100% {
+        background-position: 55% 8%, 93% 52%, 4% 50%, 70% 48%, 0% 50%;
+    }
+}
+
+/* a soft coloured bloom that breathes with the boil, so the word glows */
+@keyframes welcomePulse {
+    0%, 100% {
+        filter: brightness(1) saturate(1.1)
+            drop-shadow(0 0 3px rgba(212, 97, 95, 0.25))
+            drop-shadow(0 0 8px rgba(143, 132, 193, 0.18));
+    }
+    50% {
+        filter: brightness(1.16) saturate(1.32)
+            drop-shadow(0 0 5px rgba(212, 97, 95, 0.38))
+            drop-shadow(0 0 13px rgba(143, 132, 193, 0.28));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .welcomeBoil {
+        animation: none;
+        background-image: linear-gradient(115deg, #b9576f, #8f84c1, #d4615f);
+        background-size: 100% 100%;
+        background-position: 0 0;
+        filter: none;
+    }
+}
+
+/* ---- Narrow screens only ---- */
+@media (max-width: 600px) {
+    /* fill the column between the top icons and the fixed bottom brand line; board stacked
+       from the top. padding-bottom reserves clearance for that fixed credit line + the
+       iOS home indicator so the board / status dot never slip behind it. */
+    .container {
+        flex: 1 1 auto;
+        min-height: 0;
+        justify-content: flex-start;
+        padding-top: 6vh;
+        padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    }
+
+    /* let the board claim more width, keeping a slim gutter each side */
+    .chessboardContainer {
+        max-width: 94vw;
+    }
+
+    /* the -50px was tuned to the desktop layout and would ride up into the header here;
+       tighter internal gap so the timer/message sit closer to the board */
+    .countdown {
+        margin-top: 0;
+        gap: 6px;
+    }
+
+    /* bigger seconds countdown */
+    .timer {
+        font-size: 26px;
+    }
+
+    /* keep the reveal slide, but leave a little breathing room between the cog and the stats */
+    .engineInfo {
+        margin-top: -30px;
+    }
+    .engineInfo.illuminated {
+        margin-top: 14px;
+    }
+
+    /* smaller rotating status message; reserve ~2 lines so it can't shove the board around */
+    .messageSlot {
+        min-height: 2.6em;
+        font-size: 20px;
+    }
+
+    .spinner {
+        width: 46px;
+    }
+
+    /* keep the two stats pinned to the left/right edges, just a touch smaller to fit */
+    .engineStats {
+        font-size: 11px;
+        gap: 6px 12px;
+    }
 }

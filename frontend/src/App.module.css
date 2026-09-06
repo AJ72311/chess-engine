@@ -2,6 +2,24 @@
     position: relative;
 }
 
+/* Wraps the brand text + icon rail. On desktop it is transparent (its children stay
+   absolutely positioned in the top corners); on narrow screens it becomes a flow header. */
+.header {
+    position: static;
+}
+
+.engineIconSlot,
+.githubIconSlot {
+    position: relative;
+    display: block;
+}
+
+/* Tap popovers for the icon blurbs — hidden entirely on desktop (hover tooltips are used there). */
+.popoverBackdrop,
+.iconPopover {
+    display: none;
+}
+
 @keyframes fadeInLogo {
     from {
         opacity: 0;
@@ -64,8 +82,14 @@
 
 .iconLink {
     display: block;
-    position: relative; 
-    margin-bottom: 15px; 
+    position: relative;
+    margin-bottom: 15px;
+    /* reset — the engine icon is a <button> */
+    background: transparent;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
 }
 
 .icon {
@@ -160,10 +184,10 @@
     position: absolute;
     top: 20px;
     left: 20px;
-    color: white; 
+    color: white;
     z-index: 1000;
     font-family: 'Tahoma', Arial, sans-serif;
-    font-size: 12px; 
+    font-size: 12px;
     opacity: 0;
 }
 
@@ -245,4 +269,134 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: textShineAuthor 11s ease-out infinite;
+}
+
+/* ---- Narrow screens: icons stay at the top, brand text moves to the bottom ---- */
+@media (max-width: 600px) {
+    /* lay the page out as a column so the brand line can be pinned to the bottom */
+    .appContainer {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+    }
+
+    .header {
+        position: relative;
+        z-index: 1000;
+        display: flex;
+        padding: max(12px, env(safe-area-inset-top))
+                 max(12px, env(safe-area-inset-right))
+                 0
+                 max(12px, env(safe-area-inset-left));
+    }
+
+    /* Quieceros icon at the left, GitHub icon at the right */
+    .iconsContainer {
+        position: static;
+        flex: 1 1 auto;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-start;
+        width: 100%;
+        gap: 10px;
+    }
+
+    /* brand line: pinned to the viewport bottom, OUT OF FLOW so it can never lengthen the
+       page / spawn a scrollbar. Bottom padding clears the iOS home indicator and Safari's
+       bottom bar (needs viewport-fit=cover on the <meta>, which is set). */
+    .topLeftText {
+        position: fixed;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 900;
+        display: block;
+        text-align: center;
+        padding: 8px max(12px, env(safe-area-inset-right))
+                 max(8px, env(safe-area-inset-bottom))
+                 max(12px, env(safe-area-inset-left));
+        box-sizing: border-box;
+        pointer-events: none;
+        background: linear-gradient(to top, #171922 0%, #171922 62%, rgba(23, 25, 34, 0) 100%);
+    }
+
+    .iconLink {
+        margin-bottom: 0;
+    }
+
+    /* a bit smaller in the compact header */
+    .icon {
+        width: 30px;
+    }
+
+    /* hover tooltips are unreachable on touch — drop them */
+    .iconLink[data-tooltip]::before,
+    .iconLink[data-tooltip]::after {
+        display: none;
+    }
+
+    .popoverBackdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 1500;
+        background: rgba(0, 0, 0, 0.1);
+    }
+
+    .iconPopover {
+        display: flow-root;
+        position: absolute;
+        top: calc(100% + 8px);
+        z-index: 1600;
+        width: min(78vw, 320px);
+        padding: 14px 16px;
+        background-color: #333;
+        color: #fff;
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: left;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    /* engine icon is in the left corner — its popover opens rightward */
+    .engineIconSlot .iconPopover {
+        left: 0;
+        right: auto;
+    }
+
+    /* github icon is in the right corner — its popover opens leftward */
+    .githubIconSlot .iconPopover {
+        right: 0;
+        left: auto;
+    }
+
+    /* float (not absolute) so only the first line clears the X; wrapped lines run full width */
+    .popoverClose {
+        float: right;
+        width: 22px;
+        height: 22px;
+        margin: 0 0 2px 8px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: #ff5f5f;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .popoverText {
+        margin: 0;
+    }
+
+    .popoverAction {
+        display: inline-block;
+        clear: both;
+        margin-top: 10px;
+        color: #ffd479;
+        font-weight: 700;
+        text-decoration: none;
+    }
 }
