@@ -271,6 +271,7 @@
 
     /* let the board claim more width, keeping a slim gutter each side */
     .chessboardContainer {
+        margin-top: -7vh;
         max-width: 94vw;
     }
 
