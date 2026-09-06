@@ -258,13 +258,14 @@
 /* ---- Narrow screens only ---- */
 @media (max-width: 600px) {
     /* fill the column between the top icons and the fixed bottom brand line; board stacked
-       from the top. padding-bottom reserves clearance for that fixed credit line + the
-       iOS home indicator so the board / status dot never slip behind it. */
+       from the top. small top padding keeps the whole apparatus high; padding-bottom
+       reserves clearance for the fixed credit line + iOS home indicator so the status
+       dot never slips behind it. */
     .container {
         flex: 1 1 auto;
         min-height: 0;
         justify-content: flex-start;
-        padding-top: 6vh;
+        padding-top: 10px;
         padding-bottom: calc(40px + env(safe-area-inset-bottom));
     }
 
@@ -290,7 +291,13 @@
         margin-top: -30px;
     }
     .engineInfo.illuminated {
-        margin-top: 14px;
+        margin-top: 8px;
+    }
+
+    /* pull the status dot in close to the board (its -42.5px was tuned for desktop) so it
+       stays well clear of the fixed credit line at the bottom of the viewport */
+    .statusIndicator {
+        bottom: -18px;
     }
 
     /* smaller rotating status message; reserve ~2 lines so it can't shove the board around */
