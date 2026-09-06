@@ -291,13 +291,7 @@
         margin-top: -30px;
     }
     .engineInfo.illuminated {
-        margin-top: 8px;
-    }
-
-    /* pull the status dot in close to the board (its -42.5px was tuned for desktop) so it
-       stays well clear of the fixed credit line at the bottom of the viewport */
-    .statusIndicator {
-        bottom: -18px;
+        margin-top: 14px;
     }
 
     /* smaller rotating status message; reserve ~2 lines so it can't shove the board around */
